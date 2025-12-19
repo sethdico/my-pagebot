@@ -1,16 +1,16 @@
 {
   "PAGE_ACCESS_TOKEN": "EAAz6u8LQaHYBQA4X6YCo1nyOxhKtcyZC82PsweZBSIy64WwDyQIMOP8UQUnTrN2Jo7gP4C5JIP99cjBovvZBudXMKLu6uzRS5CMEHwOzltNZACVZCK8rS1aB8ZBxwPT8f3onrArqKlq1o0wsGdZCKazezrZCXSI08WgCJL6Ov4lwbHfnDb7b9liwFrhtIcEJbG5yBCjs9QZDZD",
   "VERIFY_TOKEN": "pagebot123",
-  "ADMINS": ["YOUR_FACEBOOK_ID_HERE"],
-  "PREFIX": "!",
-  "BOTNAME": "Pagebot",
+  "ADMINS": ["100093157180148"],
+  "PREFIX": "/",
+  "BOTNAME": "Amdus",
   "clearData": false,
   "markAsSeen": true,
   "selfListen": false,
   "THEME_SETUP": {
     "THEME": "Fiery",
     "ADMIN": "Admin",
-    "TITLE": "PAGEBOT",
+    "TITLE": "AMDUS",
     "HTML": ["#bc6107", "#fe8916", "#ff952a"]
   }
 }
