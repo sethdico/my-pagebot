@@ -4,8 +4,8 @@ module.exports.config = {
     name: "you",
     author: "Sethdico (Ported)",
     version: "1.0",
-    category: "Utility",
-    description: "You.com Search",
+    category: "AI", // Changed from Utility to AI
+    description: "You.com AI Search",
     adminOnly: false,
     usePrefix: false,
     cooldown: 10,
