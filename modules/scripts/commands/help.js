@@ -1,91 +1,69 @@
-const fs = require("fs");
-const path = require("path");
-
 module.exports.config = {
   name: "help",
-  author: "Sethdico (Ported)",
-  version: "3.0",
-  category: "Utility",
-  description: "List all commands.",
-  adminOnly: false,
-  usePrefix: false,
-  cooldown: 5,
+  version: "1.0",
+  author: "Sethdico",
+  role: 0,
+  category: "utility",
+  description: "Show help menu or info about a specific command.",
+  usage: "[command]",
+  hasPrefix: false,
+  aliases: ["h"]
 };
 
-module.exports.run = function ({ event, args }) {
-  const commandsPath = __dirname;
-  const commandFiles = fs.readdirSync(commandsPath).filter(file => file.endsWith(".js"));
+module.exports.run = async function ({ api, event, args }) {
+  const { threadID, senderID, messageID } = event;
+  const commandName = args[0]?.toLowerCase();
 
-  // ====================================================
-  // 1. SPECIFIC COMMAND HELP (e.g. "help ai")
-  // ====================================================
-  if (args[0]) {
-    const cmdName = args[0].toLowerCase();
-    let foundCmd = null;
+  // If user types "help ai", show AI-specific help
+  if (commandName === "ai") {
+    const helpMessage = `🤖 **Amdusbot AI — Full Capabilities**  
 
-    for (const file of commandFiles) {
-      try {
-        const cmd = require(path.join(commandsPath, file));
-        if (cmd.config && (cmd.config.name === cmdName || (cmd.config.aliases && cmd.config.aliases.includes(cmdName)))) {
-          foundCmd = cmd.config;
-          break;
-        }
-      } catch (e) { continue; }
-    }
+📸 **Image Analysis**  
+→ Send a photo and ask:  
+   • "What’s in this image?"  
+   • "Describe this in detail"  
+   • "Turn this into anime style"  
 
-    if (foundCmd) {
-      const info = `📖 **COMMAND: ${foundCmd.name.toUpperCase()}**
-━━━━━━━━━━━━━━━━
-📝 **Desc:** ${foundCmd.description}
-📂 **Category:** ${foundCmd.category}
-⌨️ **Usage:** ${foundCmd.name} ${foundCmd.usage ? foundCmd.usage : ""}
-⏱️ **Cooldown:** ${foundCmd.cooldown}s
-━━━━━━━━━━━━━━━━`;
-      return api.sendMessage(info, event.sender.id);
-    } else {
-      return api.sendMessage(`❌ Command "${cmdName}" not found.`, event.sender.id);
-    }
+🎥 **YouTube Summarization**  
+→ Paste any YouTube link → I’ll:  
+   • Show a thumbnail 🖼️  
+   • Summarize the video in your language  
+
+🌐 **Real-Time Web Search**  
+→ Ask: "Latest news about AI" or "Who won the 2024 election?"  
+→ I search live and cite sources!  
+
+📄 **File & Document Creation**  
+→ Request:  
+   • "Make a resume in PDF"  
+   • "Generate Python code for a chatbot"  
+   • "Create an Excel sales tracker"  
+→ I send a direct download link!  
+
+🎨 **AI Image Generation**  
+→ Say: "Draw a cyberpunk cat" → I’ll generate & send the image!  
+
+🌍 **Automatic Language Support**  
+→ I detect your language (English, Tagalog, Spanish, etc.)  
+→ And always reply in **your language**!  
+
+⚡ **Smart & Safe**  
+→ No spam: 5 messages/minute/user  
+→ All files scanned & cleaned before sending  
+→ Memory cleared with “clear”  
+
+💡 **Just type your request!**  
+Examples:  
+• “Summarize this video: [YouTube link]”  
+• (Send photo) + “What breed is this dog?”  
+• “Create a birthday invitation in Tagalog”  
+
+✨ Made with ❤️ by Sethdico`;
+
+    return api.sendMessage(helpMessage, threadID);
   }
 
-  // ====================================================
-  // 2. DYNAMIC LIST (Shows ALL files found)
-  // ====================================================
-  
-  const categories = {};
-  let totalCommands = 0;
-
-  for (const file of commandFiles) {
-    try {
-      const cmd = require(path.join(commandsPath, file));
-      if (cmd.config && cmd.config.name) {
-        const cat = cmd.config.category || "Uncategorized";
-        if (!categories[cat]) categories[cat] = [];
-        categories[cat].push(cmd.config.name);
-        totalCommands++;
-      }
-    } catch (e) {
-      console.error(`Error loading ${file}:`, e);
-    }
-  }
-
-  // Emoji Map for Categories
-  const icons = {
-    "AI": "🧠",
-    "Utility": "🛠️",
-    "Fun": "🎮",
-    "Admin": "🔒",
-    "Uncategorized": "📂"
-  };
-
-  let msg = `🤖 **Pagebot Commands (${totalCommands})**\n━━━━━━━━━━━━━━━━\n`;
-
-  // Sort categories alphabetically and print
-  Object.keys(categories).sort().forEach(cat => {
-    const icon = icons[cat] || "📂"; // Use folder icon if category name doesn't match list
-    msg += `${icon} **${cat}**\n   ${categories[cat].join(", ")}\n\n`;
-  });
-
-  msg += `━━━━━━━━━━━━━━━━\n💡 Type "help <command>" for details.\nExample: help ai`;
-
-  api.sendMessage(msg, event.sender.id);
+  // Optional: Add general help fallback later
+  // For now, if not "help ai", you can leave blank or show main menu
+  return api.sendMessage("📘 Use: help ai → to see AI features", threadID);
 };
