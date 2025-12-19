@@ -2,18 +2,18 @@ module.exports = async function (event) {
   const config = require("../config.json");
   const api = {};
   
-  // List of scripts to load from src/
+  // LOAD ALL API SCRIPTS
   const scripts = [
     "markAsSeen",
     "sendMessage",
-    "sendTypingIndicator", // Added
-    "setMessageReaction",  // Added
-    "sendAttachment"       // Added
+    "sendTypingIndicator",
+    "setMessageReaction",
+    "sendAttachment",
+    "sendButton" // <--- This was missing!
   ];
 
   for (const scriptName of scripts) {
     try {
-      // Load the script and pass the event to it
       const loadedScript = require(`./src/${scriptName}`);
       if (typeof loadedScript === "function") {
         api[scriptName] = loadedScript(event);
@@ -26,6 +26,5 @@ module.exports = async function (event) {
   global.api = api;
   global.PREFIX = config.PREFIX;
   
-  // Run the handler
   require("./handler.js")(event);
 };
