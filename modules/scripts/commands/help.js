@@ -1,69 +1,57 @@
+const fs = require("fs");
+const path = require("path");
+
 module.exports.config = {
   name: "help",
-  version: "1.0",
   author: "Sethdico",
-  role: 0,
-  category: "utility",
-  description: "Show help menu or info about a specific command.",
-  usage: "[command]",
-  hasPrefix: false,
-  aliases: ["h"]
+  version: "1.5",
+  category: "Utility",
+  description: "Show command list and AI features.",
+  adminOnly: false,
+  usePrefix: false,
+  cooldown: 5,
 };
 
-module.exports.run = async function ({ api, event, args }) {
-  const { threadID, senderID, messageID } = event;
-  const commandName = args[0]?.toLowerCase();
+module.exports.run = async function ({ event, args }) {
+  // 1. Correct Pathing: Point exactly to where the commands are
+  const commandsPath = __dirname; 
+  const senderID = event.sender.id;
 
-  // If user types "help ai", show AI-specific help
-  if (commandName === "ai") {
-    const helpMessage = `🤖 **Amdusbot AI — Full Capabilities**  
-
-📸 **Image Analysis**  
-→ Send a photo and ask:  
-   • "What’s in this image?"  
-   • "Describe this in detail"  
-   • "Turn this into anime style"  
-
-🎥 **YouTube Summarization**  
-→ Paste any YouTube link → I’ll:  
-   • Show a thumbnail 🖼️  
-   • Summarize the video in your language  
-
-🌐 **Real-Time Web Search**  
-→ Ask: "Latest news about AI" or "Who won the 2024 election?"  
-→ I search live and cite sources!  
-
-📄 **File & Document Creation**  
-→ Request:  
-   • "Make a resume in PDF"  
-   • "Generate Python code for a chatbot"  
-   • "Create an Excel sales tracker"  
-→ I send a direct download link!  
-
-🎨 **AI Image Generation**  
-→ Say: "Draw a cyberpunk cat" → I’ll generate & send the image!  
-
-🌍 **Automatic Language Support**  
-→ I detect your language (English, Tagalog, Spanish, etc.)  
-→ And always reply in **your language**!  
-
-⚡ **Smart & Safe**  
-→ No spam: 5 messages/minute/user  
-→ All files scanned & cleaned before sending  
-→ Memory cleared with “clear”  
-
-💡 **Just type your request!**  
-Examples:  
-• “Summarize this video: [YouTube link]”  
-• (Send photo) + “What breed is this dog?”  
-• “Create a birthday invitation in Tagalog”  
-
-✨ Made with ❤️ by Sethdico`;
-
-    return api.sendMessage(helpMessage, threadID);
+  // 2. Handle "help ai"
+  if (args[0]?.toLowerCase() === "ai") {
+    const aiHelp = `🤖 **Amdusbot AI Capabilities**\n━━━━━━━━━━━━━━━━\n` +
+      `• **Chat**: Talk naturally in any language.\n` +
+      `• **Vision**: Send a photo to analyze it.\n` +
+      `• **YouTube**: Send a link to summarize videos.\n` +
+      `• **Files**: Ask for .pdf, .docx, or .txt files.\n` +
+      `• **Drawing**: Ask me to draw an image.\n\n` +
+      `💡 *No prefix needed, just talk!*`;
+    return api.sendMessage(aiHelp, senderID);
   }
 
-  // Optional: Add general help fallback later
-  // For now, if not "help ai", you can leave blank or show main menu
-  return api.sendMessage("📘 Use: help ai → to see AI features", threadID);
+  // 3. General Help List
+  try {
+    const commandFiles = fs.readdirSync(commandsPath).filter(file => file.endsWith(".js"));
+    const categories = {};
+
+    commandFiles.forEach(file => {
+      const cmd = require(path.join(commandsPath, file));
+      if (cmd.config && cmd.config.name) {
+        const cat = cmd.config.category || "Uncategorized";
+        if (!categories[cat]) categories[cat] = [];
+        categories[cat].push(cmd.config.name);
+      }
+    });
+
+    let msg = `🤖 **Amdusbot Command List**\n━━━━━━━━━━━━━━━━\n`;
+    for (const [category, cmds] of Object.entries(categories)) {
+      msg += `📂 **${category}**\n   ${cmds.join(", ")}\n\n`;
+    }
+    msg += `━━━━━━━━━━━━━━━━\n💡 Type "help ai" for AI tips.`;
+
+    api.sendMessage(msg, senderID);
+  } catch (err) {
+    console.error(err);
+    api.sendMessage("❌ Error listing commands. Check server logs.", senderID);
+  }
 };
