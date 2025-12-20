@@ -13,12 +13,16 @@ module.exports = async function (event) {
   if (event.message?.is_echo) return;
   if (config.markAsSeen) api.markAsSeen(true, event.sender.id).catch(()=>{});
 
-  const messageText = (event.message?.text || "").trim();
+  // --- 🛠️ FIX: Detect button clicks (payload) as if they were typed messages ---
+  const messageText = (event.message?.text || event.postback?.payload || "").trim();
+  
+  if (!messageText && !event.message?.attachments) return;
+
   const [rawCmd, ...args] = messageText.split(" ");
   let cmdName = rawCmd.toLowerCase();
   let commandFound = false;
 
-  // --- 🪄 ALIASES ---
+  // Aliases
   if (cmdName === "imge" || cmdName === "generate") cmdName = "deepimg";
   if (cmdName === "search") cmdName = "webpilot";
 
@@ -43,7 +47,6 @@ module.exports = async function (event) {
     }
   }
 
-  // --- 🤖 AUTO-AI FALLBACK ---
   if (!commandFound && !messageText.startsWith(config.PREFIX) && (messageText || event.message?.attachments)) {
       try {
           const aiCommand = require(path.join(modulesPath, "ai.js"));
