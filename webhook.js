@@ -6,11 +6,19 @@ let messagesCache = {};
 const messagesFilePath = "./page/data.json";
 
 if (!config.clearData && fs.existsSync(messagesFilePath)) {
-  try { messagesCache = JSON.parse(fs.readFileSync(messagesFilePath, "utf8")); } catch (e) {}
+  try { messagesCache = JSON.parse(fs.readFileSync(messagesFilePath, "utf8")); } catch (e) { messagesCache = {}; }
 }
 
 function writeToFile() {
-  try { fs.writeFileSync(messagesFilePath, JSON.stringify(messagesCache, null, 2), "utf8"); } catch (e) {}
+  try {
+    // --- 🧹 AUTO-PRUNE LOGIC ---
+    const keys = Object.keys(messagesCache);
+    if (keys.length > 500) {
+        const toDelete = keys.slice(0, keys.length - 500);
+        toDelete.forEach(key => delete messagesCache[key]);
+    }
+    fs.writeFileSync(messagesFilePath, JSON.stringify(messagesCache, null, 2), "utf8");
+  } catch (e) { console.error("Cache Write Error:", e); }
 }
 
 module.exports.listen = function (event) {
@@ -40,6 +48,7 @@ module.exports.listen = function (event) {
           }
 
           if (config.selfListen && ev?.message?.is_echo) return;
+          if (ev.message?.is_echo) return;
 
           utils.log(ev);
           require("./page/main")(ev);
