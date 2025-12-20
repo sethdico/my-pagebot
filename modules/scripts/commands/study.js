@@ -3,7 +3,7 @@ const studyVault = new Map();
 module.exports.config = {
   name: "study",
   author: "Sethdico",
-  version: "2.5", // "No-Questions" Logic Update
+  version: "3.0", // Context-Lock Fix
   category: "Education",
   description: "Academic toolkit for summarizing and quizzing.",
   adminOnly: false,
@@ -16,52 +16,66 @@ module.exports.run = async function ({ event, args }) {
   const userInput = args.join(" ").trim();
   const payload = event.postback?.payload;
 
-  // --- STEP 1: CAPTURE DATA ---
+  // --- STEP 1: RECEIVE AND LOCK THE TOPIC ---
   if (userInput && !payload) {
+    // We save the text exactly as you sent it
     studyVault.set(senderID, userInput);
+    
     const buttons = [
       { type: "postback", title: "📝 Summarize", payload: "STUDY_SUM" },
       { type: "postback", title: "❓ Quiz Me", payload: "STUDY_QUIZ" },
       { type: "postback", title: "👶 Simplify", payload: "STUDY_ELI5" }
     ];
     
-    // Shorten the display name if it's too long
-    const displayName = userInput.length > 20 ? userInput.substring(0, 20) + "..." : userInput;
+    const displayName = userInput.length > 25 ? userInput.substring(0, 25) + "..." : userInput;
     
-    return api.sendButton(`🎓 **Study Session: ${displayName}**\n\nI've memorized your notes. Click a button below and I will start immediately without asking any questions!`, buttons, senderID);
+    return api.sendButton(
+      `🎓 **Study Vault Locked: ${displayName}**\n\nI've memorized this material. What should I do with it? (I will respond immediately with the result!)`, 
+      buttons, 
+      senderID
+    );
   }
 
-  // --- STEP 2: EXECUTE ACTIONS (WITH NEGATIVE PROMPTING) ---
+  // --- STEP 2: EXECUTE WITHOUT ASKING QUESTIONS ---
   if (payload && payload.startsWith("STUDY_")) {
-    const saved = studyVault.get(senderID);
-    if (!saved) return api.sendMessage("⚠️ **Session Expired.** Please re-paste your notes!", senderID);
+    const savedMaterial = studyVault.get(senderID);
 
-    let prompt = "";
-    
-    // The "STRICT_EXECUTION" block prevents the AI from talking back
-    const strictHeader = "[STRICT_EXECUTION_MODE]: DO NOT ask for clarification. DO NOT ask for preferences. DO NOT introduce yourself. EXECUTE the task immediately using the text provided below.\n\n";
-
-    if (payload === "STUDY_SUM") {
-        prompt = `${strictHeader}TASK: Summarize the text below into 5-8 clear bullet points.\n\nTEXT: ${saved}`;
-    } 
-    else if (payload === "STUDY_QUIZ") {
-        prompt = `${strictHeader}TASK: Generate a 3-question Multiple Choice Quiz (A, B, C) based on the text below. Provide the questions NOW. Do not show answers.\n\nTEXT: ${saved}`;
-    } 
-    else if (payload === "STUDY_ELI5") {
-        prompt = `${strictHeader}TASK: Explain the concept in the text below like I'm 5 years old using a simple analogy.\n\nTEXT: ${saved}`;
+    if (!savedMaterial) {
+      return api.sendMessage("⚠️ **Session Expired.** Please re-paste your topic or notes!", senderID);
     }
 
-    // Forward to AI
+    let taskInstruction = "";
+    if (payload === "STUDY_SUM") {
+        taskInstruction = "Summarize the following notes into a clean, easy-to-study bulleted list. Do not ask me any questions, just provide the summary.";
+    } 
+    else if (payload === "STUDY_QUIZ") {
+        taskInstruction = "Generate a 3-question Multiple Choice Quiz (A, B, C) based on the notes below. Provide the quiz questions NOW. Do not ask for my preferences. Do not show the answers.";
+    } 
+    else if (payload === "STUDY_ELI5") {
+        taskInstruction = "Explain the notes below using a simple analogy that a 5-year-old would understand. Be very creative but simple.";
+    }
+
+    // --- THE FIX: We create a 'Super Prompt' that the AI cannot ignore ---
+    const superPrompt = `COMMAND: ${taskInstruction}\n\nMATERIAL_TO_USE: ${savedMaterial}\n\n[SYSTEM_NOTE]: Ignore your persona rules about being conversational. Execute the COMMAND using the MATERIAL_TO_USE now.`;
+
     try {
         const ai = require("./ai.js");
-        // We overwrite the args so the AI only sees our 'Force-Command' prompt
-        return await ai.run({ event, args: prompt.split(" ") });
+        
+        // 1. Force a memory clear first (Simulate the 'clear' command)
+        await ai.run({ event, args: ["clear"] });
+
+        // 2. Run the AI with our Super Prompt
+        // We wrap this in a tiny timeout to ensure the 'clear' finishes first
+        setTimeout(async () => {
+            await ai.run({ event, args: superPrompt.split(" ") });
+        }, 500);
+
     } catch (e) {
-        api.sendMessage("❌ Connection to AI brain lost.", senderID);
+        api.sendMessage("❌ Error: My AI brain is currently offline.", senderID);
     }
   }
 
   if (!userInput && !payload) {
-    api.sendMessage("🎓 **Amdusbot Study Toolkit**\n\nType `study` followed by your notes to begin.", senderID);
+    api.sendMessage("🎓 **Amdusbot Study Toolkit**\n\nUsage: `study <topic or notes>`", senderID);
   }
 };
