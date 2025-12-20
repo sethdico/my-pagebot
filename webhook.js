@@ -11,14 +11,13 @@ if (!config.clearData && fs.existsSync(messagesFilePath)) {
 
 function writeToFile() {
   try {
-    // --- 🧹 AUTO-PRUNE LOGIC ---
     const keys = Object.keys(messagesCache);
     if (keys.length > 500) {
         const toDelete = keys.slice(0, keys.length - 500);
         toDelete.forEach(key => delete messagesCache[key]);
     }
     fs.writeFileSync(messagesFilePath, JSON.stringify(messagesCache, null, 2), "utf8");
-  } catch (e) { console.error("Cache Write Error:", e); }
+  } catch (e) {}
 }
 
 module.exports.listen = function (event) {
@@ -27,15 +26,10 @@ module.exports.listen = function (event) {
       event.entry.forEach((entry) => {
         entry.messaging.forEach(async (ev) => {
           ev.type = await utils.getEventType(ev);
-          
-          // SECURITY: Prioritize Render Environment Variables
           global.PAGE_ACCESS_TOKEN = process.env.PAGE_ACCESS_TOKEN || config.PAGE_ACCESS_TOKEN;
 
           if (ev.message && ev.message.mid) {
-            messagesCache[ev.message.mid] = {
-              text: ev.message.text,
-              attachments: ev.message.attachments
-            };
+            messagesCache[ev.message.mid] = { text: ev.message.text, attachments: ev.message.attachments };
             writeToFile();
           }
 
