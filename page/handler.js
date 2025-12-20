@@ -2,9 +2,9 @@ const fs = require("fs");
 const path = require("path");
 const config = require("../config.json");
 
-// Global rate limit (e.g., 10 req/min per user)
+// --- 🛡️ V2 Feature: GLOBAL RATE LIMITER ---
 const rateLimitStore = new Map();
-const RATE_LIMIT = { requests: 10, windowMs: 60000 };
+const RATE_LIMIT = { requests: 10, windowMs: 60000 }; // 10 messages per minute per user
 
 module.exports = async function (event) {
   const modulesPath = path.join(__dirname, "../modules/scripts/commands");
@@ -16,18 +16,24 @@ module.exports = async function (event) {
 
   if (event.message?.is_echo) return;
 
-  // Global rate limit check
   const senderID = event.sender.id;
+
+  // --- 🛡️ RATE LIMIT CHECK ---
   const now = Date.now();
   const userTs = rateLimitStore.get(senderID) || [];
   const recentTs = userTs.filter(ts => now - ts < RATE_LIMIT.windowMs);
+  
   if (recentTs.length >= RATE_LIMIT.requests) {
-    return api.sendMessage("⏳ You're sending too many requests! Slow down.", senderID);
+    // Optional: Warn them once
+    if (recentTs.length === RATE_LIMIT.requests) {
+        api.sendMessage("⏳ You are sending messages too fast. Please slow down.", senderID);
+    }
+    return; // Stop processing
   }
   recentTs.push(now);
   rateLimitStore.set(senderID, recentTs);
 
-  // Sanitize input
+  // Normal Logic
   const messageText = (event.message?.text || event.postback?.payload || "").trim();
   if (!messageText && !event.message?.attachments) return;
 
@@ -51,8 +57,8 @@ module.exports = async function (event) {
         try {
             await command.run({ event, args });
         } catch (e) { 
-            console.error(`Crash in ${cmdName}:`, e.message);
-            api.sendMessage("❌ Command error. Try again.", senderID);
+            console.error(`Crash in ${cmdName}:`, e.message); 
+            api.sendMessage("❌ Command error. Please try again.", senderID);
         }
         break;
     }
@@ -65,7 +71,6 @@ module.exports = async function (event) {
           await aiCommand.run({ event, args: messageText.split(" ") });
       } catch (e) {
           console.error("Auto-AI Error:", e.message);
-          api.sendMessage("❌ AI unavailable.", senderID);
       }
   }
 };
