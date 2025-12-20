@@ -3,10 +3,10 @@ const webhook = require("./webhook.js");
 const parser = require("body-parser");
 const express = require("express");
 const path = require("path");
-const fs = require("fs"); // Added for safety
+const fs = require("fs");
 const app = express();
 
-// --- 🛡️ SAFETY NET: AUTO-CREATE CACHE ---
+// --- 🛡️ SAFETY: AUTO-CREATE CACHE FOLDER ---
 const cacheDir = path.join(__dirname, "modules/scripts/commands/cache");
 if (!fs.existsSync(cacheDir)) {
     fs.mkdirSync(cacheDir, { recursive: true });
