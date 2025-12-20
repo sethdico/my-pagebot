@@ -1,54 +1,48 @@
 const config = require("./config.json");
 const utils = require("./modules/utils");
-const fs = require("fs-extra");
+const fs = require("fs");
 const path = require("path");
 
 let messagesCache = {};
 const messagesFilePath = path.join(__dirname, "page/data.json");
-const CACHE_LIMIT = 500;
-const CLEANUP_INTERVAL = 60 * 60 * 1000; // 1 hour
 
 // Load cache safely
-(async () => {
-  if (await fs.pathExists(messagesFilePath)) {
-    try { messagesCache = JSON.parse(await fs.readFile(messagesFilePath, "utf8")); } catch (e) { messagesCache = {}; }
-  }
-})();
-
-// Periodic cleanup
-setInterval(() => {
-  const keys = Object.keys(messagesCache);
-  if (keys.length > CACHE_LIMIT) {
-    const toDelete = keys.slice(0, keys.length - CACHE_LIMIT);
-    toDelete.forEach(key => delete messagesCache[key]);
-    writeToFile();
-  }
-}, CLEANUP_INTERVAL);
-
-async function writeToFile() {
-  try {
-    await fs.writeFile(messagesFilePath, JSON.stringify(messagesCache, null, 2), "utf8");
-  } catch (e) { console.error("Cache write error:", e); }
+if (fs.existsSync(messagesFilePath)) {
+  try { messagesCache = JSON.parse(fs.readFileSync(messagesFilePath, "utf8")); } catch (e) { messagesCache = {}; }
 }
 
-module.exports.listen = async function (event) {
+function writeToFile() {
   try {
-    // Input validation
-    if (!event || typeof event !== 'object') return;
-    if (event.object !== "page") return;
+    const keys = Object.keys(messagesCache);
+    // V2 Optimization: Keep cache small (500 items max)
+    if (keys.length > 500) {
+        const toDelete = keys.slice(0, keys.length - 500);
+        toDelete.forEach(key => delete messagesCache[key]);
+    }
+    fs.writeFileSync(messagesFilePath, JSON.stringify(messagesCache, null, 2), "utf8");
+  } catch (e) { console.error("Cache Write Error:", e.message); }
+}
 
-    event.entry.forEach(async (entry) => {
+module.exports.listen = function (event) {
+  try {
+    // V2 Validation: Ensure event exists
+    if (!event || typeof event !== 'object' || event.object !== "page") return;
+
+    event.entry.forEach((entry) => {
       entry.messaging.forEach(async (ev) => {
-        // Sanitize event
+        // V2 Validation: Ensure sender exists
         if (!ev.sender || !ev.sender.id) return;
+
         ev.type = await utils.getEventType(ev);
         global.PAGE_ACCESS_TOKEN = process.env.PAGE_ACCESS_TOKEN || config.PAGE_ACCESS_TOKEN;
 
-        if (ev.message && ev.message.mid && ev.message.text) {
+        // Cache Logic
+        if (ev.message && ev.message.mid) {
           messagesCache[ev.message.mid] = { text: ev.message.text, attachments: ev.message.attachments };
-          await writeToFile();
+          writeToFile();
         }
 
+        // Reply Handling
         if (ev.type === "message_reply") {
           const repliedMid = ev.message.reply_to?.mid;
           if (repliedMid && messagesCache[repliedMid]) {
@@ -60,9 +54,9 @@ module.exports.listen = async function (event) {
         if (config.selfListen && ev?.message?.is_echo) return;
         if (ev.message?.is_echo) return;
 
-        utils.log(ev); // Sanitized logging in utils.js
+        utils.log(ev);
         require("./page/main")(ev);
       });
     });
-  } catch (error) { console.error("Webhook error:", error.message); }
+  } catch (error) { console.error("Webhook Logic Error:", error.message); }
 };
