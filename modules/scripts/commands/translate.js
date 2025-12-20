@@ -3,18 +3,17 @@ const axios = require("axios");
 module.exports.config = {
     name: "translate",
     author: "Sethdico",
-    version: "1.0",
+    version: "1.2",
     category: "Utility",
-    description: "Translate text",
+    description: "Translate text with voice support.",
     adminOnly: false,
     usePrefix: false,
     cooldown: 3,
 };
 
 module.exports.run = async function ({ event, args }) {
-    // 1. CODE LIST
     if (args[0]?.toLowerCase() === "codes" || args[0]?.toLowerCase() === "list") {
-        const msg = "🌐 **LANGUAGE CODES**\n━━━━━━━━━━━━━━━━\nen: English\ntl: Tagalog\njp: Japanese\nko: Korean\nfr: French\nes: Spanish\ncn: Chinese\n(And many more standard ISO codes)";
+        const msg = "🌐 **LANGUAGE CODES**\nen: English\ntl: Tagalog\njp: Japanese\nfr: French\nes: Spanish";
         return api.sendMessage(msg, event.sender.id);
     }
 
@@ -37,8 +36,20 @@ module.exports.run = async function ({ event, args }) {
         const translation = res.data[0].map(x => x[0]).join("");
         const detected = res.data[2];
 
-        const msg = `🌐 **TRANSLATION**\n━━━━━━━━━━━━━━━━\n📥 **[${detected.toUpperCase()}]:**\n${text}\n\n📤 **[${targetLang.toUpperCase()}]:**\n${translation}`;
-        api.sendMessage(msg, event.sender.id);
+        // Create a Google TTS Link for the button
+        const audioLink = `https://translate.google.com/translate_tts?ie=UTF-8&q=${encodeURIComponent(translation)}&tl=${targetLang}&client=tw-ob`;
+
+        const buttons = [
+            {
+                type: "web_url",
+                url: audioLink,
+                title: "🔊 Listen"
+            }
+        ];
+
+        const msg = `🌐 **TRANSLATION**\n━━━━━━━━━━━━━━━━\n📥 [${detected.toUpperCase()}]: ${text}\n📤 [${targetLang.toUpperCase()}]: ${translation}`;
+        
+        await api.sendButton(msg, buttons, event.sender.id);
 
     } catch (e) {
         api.sendMessage("❌ Translation failed.", event.sender.id);
