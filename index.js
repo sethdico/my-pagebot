@@ -3,7 +3,15 @@ const webhook = require("./webhook.js");
 const parser = require("body-parser");
 const express = require("express");
 const path = require("path");
+const fs = require("fs"); // Added for safety
 const app = express();
+
+// --- 🛡️ SAFETY NET: AUTO-CREATE CACHE ---
+const cacheDir = path.join(__dirname, "modules/scripts/commands/cache");
+if (!fs.existsSync(cacheDir)) {
+    fs.mkdirSync(cacheDir, { recursive: true });
+    console.log("📁 SYSTEM: Created missing cache directory.");
+}
 
 app.use(parser.json());
 app.use(express.static("website"));
