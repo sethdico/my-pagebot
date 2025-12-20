@@ -1,15 +1,15 @@
 module.exports.config = {
     name: "48laws",
     author: "Sethdico (Ported)",
-    version: "1.0",
+    version: "1.1",
     category: "Fun",
-    description: "Random Law of Power",
+    description: "Random Law of Power with button support.",
     adminOnly: false,
     usePrefix: false,
     cooldown: 2,
 };
 
-module.exports.run = function ({ event, args }) {
+module.exports.run = async function ({ event, args }) {
     const laws = [
         "Never Outshine the Master", "Never Put Too Much Trust in Friends", "Conceal Your Intentions", 
         "Always Say Less than Necessary", "So Much Depends on Reputation", "Court Attention at all Cost", 
@@ -32,5 +32,15 @@ module.exports.run = function ({ event, args }) {
     let num = args[0] ? parseInt(args[0]) : Math.floor(Math.random() * 48) + 1;
     if (isNaN(num) || num < 1 || num > 48) num = Math.floor(Math.random() * 48) + 1;
 
-    api.sendMessage(`📖 **Law #${num}**\n\n${laws[num-1]}`, event.sender.id);
+    const msg = `📖 **Law #${num}**\n━━━━━━━━━━━━━━━━\n${laws[num-1]}`;
+    
+    const buttons = [
+        {
+            type: "postback",
+            title: "🎲 Another Law",
+            payload: "48laws" // This triggers the command again
+        }
+    ];
+
+    api.sendButton(msg, buttons, event.sender.id);
 };
