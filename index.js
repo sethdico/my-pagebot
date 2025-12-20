@@ -6,11 +6,17 @@ const path = require("path");
 const fs = require("fs");
 const app = express();
 
-// --- 🛡️ SAFETY: AUTO-CREATE CACHE FOLDER ---
 const cacheDir = path.join(__dirname, "modules/scripts/commands/cache");
+
+// --- 🧹 STARTUP CLEANER ---
 if (!fs.existsSync(cacheDir)) {
     fs.mkdirSync(cacheDir, { recursive: true });
-    console.log("📁 SYSTEM: Created missing cache directory.");
+} else {
+    const files = fs.readdirSync(cacheDir);
+    for (const file of files) {
+        try { fs.unlinkSync(path.join(cacheDir, file)); } catch(e) {}
+    }
+    console.log("🧹 SYSTEM: Cache cleared on startup.");
 }
 
 app.use(parser.json());
