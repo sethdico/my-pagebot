@@ -4,63 +4,66 @@ const path = require("path");
 module.exports.config = {
   name: "help",
   author: "Sethdico",
-  version: "2.5",
+  version: "3.0-Menu",
   category: "Utility",
-  description: "Interactive command dashboard.",
+  description: "Interactive command menu.",
   adminOnly: false,
   usePrefix: false,
-  cooldown: 5,
+  cooldown: 3,
 };
 
 module.exports.run = async function ({ event, args }) {
   const senderID = event.sender.id;
-  const commandsPath = __dirname;
   
-  // Handle "help ai" details
-  if (args[0]?.toLowerCase() === "ai") {
-    const aiHelp = `🤖 **Amdusbot AI Tips**\n━━━━━━━━━━━━━━━━\n` +
-      `• Just talk! No need for ! or /\n` +
-      `• Send images to analyze them\n` +
-      `• Ask: "Make a PDF about taxes"\n` +
-      `• Ask: "Draw a futuristic city"\n` +
-      `• Send a YouTube link to summarize`;
-    return api.sendMessage(aiHelp, senderID);
+  // Get all commands from the global cache (created in index.js)
+  const commands = global.client.commands;
+  const categories = {};
+
+  // Sort commands into categories
+  commands.forEach((cmd) => {
+      const cat = cmd.config.category || "General";
+      if (!categories[cat]) categories[cat] = [];
+      categories[cat].push(cmd.config.name);
+  });
+
+  // If user typed "help <category>", show that category
+  const targetCategory = args[0] ? args[0].toLowerCase() : null;
+
+  if (targetCategory) {
+      // Find matching category (case insensitive)
+      const catName = Object.keys(categories).find(c => c.toLowerCase() === targetCategory);
+      
+      if (catName) {
+          const cmds = categories[catName].join(", ");
+          const msg = `📂 **Category: ${catName}**\n━━━━━━━━━━━━━━━━\n${cmds}\n━━━━━━━━━━━━━━━━\nType a command name to use it!`;
+          
+          // Back Button
+          const buttons = [{ type: "postback", title: "⬅️ Back to Menu", payload: "help" }];
+          return api.sendButton(msg, buttons, senderID);
+      }
   }
 
-  try {
-    const commandFiles = fs.readdirSync(commandsPath).filter(file => file.endsWith(".js"));
-    const categories = {};
+  // --- MAIN MENU ---
+  let msg = `🤖 **Amdusbot Menu**\nSelect a category below:\n`;
+  const buttons = [];
 
-    commandFiles.forEach(file => {
-      const cmd = require(path.join(commandsPath, file));
-      if (cmd.config && cmd.config.name) {
-        const cat = cmd.config.category || "General";
-        if (!categories[cat]) categories[cat] = [];
-        categories[cat].push(cmd.config.name);
+  Object.keys(categories).forEach(cat => {
+      msg += `\n📁 ${cat}`;
+      // Add a button for this category
+      if (buttons.length < 3) { // FB limits buttons to 3. 
+          // If you have more than 3 categories, we prioritize the popular ones or group them.
+          buttons.push({
+              type: "postback",
+              title: `📂 ${cat}`,
+              payload: `help ${cat}` // This triggers the command again with the category
+          });
       }
-    });
+  });
 
-    let helpMsg = `🤖 **Amdusbot Dashboard**\n━━━━━━━━━━━━━━━━\n`;
-    for (const [category, cmds] of Object.entries(categories)) {
-      helpMsg += `📂 **${category}**\n   ${cmds.join(", ")}\n\n`;
-    }
-
-    const buttons = [
-      {
-        type: "web_url",
-        url: "https://www.facebook.com/seth09asher",
-        title: "Contact Owner"
-      },
-      {
-        type: "web_url",
-        url: "https://github.com/sethdico",
-        title: "Bot GitHub"
-      }
-    ];
-
-    await api.sendButton(helpMsg + "━━━━━━━━━━━━━━━━", buttons, senderID);
-    
-  } catch (err) {
-    api.sendMessage("❌ Error loading command list.", senderID);
+  // If we have too many categories for buttons, just list them in text
+  if (Object.keys(categories).length > 3) {
+      msg += `\n\n(Type "help ai" or "help fun" to see more)`;
   }
+
+  await api.sendButton(msg, buttons, senderID);
 };
