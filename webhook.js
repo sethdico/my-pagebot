@@ -5,32 +5,41 @@ const path = require("path");
 
 let messagesCache = {};
 const messagesFilePath = path.join(__dirname, "page/data.json");
+let saveTimer = null; // 🟢 NEW: Timer variable
 
 // Load cache safely
 if (fs.existsSync(messagesFilePath)) {
   try { messagesCache = JSON.parse(fs.readFileSync(messagesFilePath, "utf8")); } catch (e) { messagesCache = {}; }
 }
 
-function writeToFile() {
-  try {
-    const keys = Object.keys(messagesCache);
-    // V2 Optimization: Keep cache small (500 items max)
-    if (keys.length > 500) {
-        const toDelete = keys.slice(0, keys.length - 500);
-        toDelete.forEach(key => delete messagesCache[key]);
-    }
-    fs.writeFileSync(messagesFilePath, JSON.stringify(messagesCache, null, 2), "utf8");
-  } catch (e) { console.error("Cache Write Error:", e.message); }
+// 🟢 NEW: Asynchronous Debounced Save
+// This waits 5 seconds after the last message to save, preventing lag
+function triggerSave() {
+    if (saveTimer) clearTimeout(saveTimer);
+    
+    saveTimer = setTimeout(() => {
+        try {
+            const keys = Object.keys(messagesCache);
+            // Keep cache small (500 items max)
+            if (keys.length > 500) {
+                const toDelete = keys.slice(0, keys.length - 500);
+                toDelete.forEach(key => delete messagesCache[key]);
+            }
+            // Async write (doesn't block the bot)
+            fs.writeFile(messagesFilePath, JSON.stringify(messagesCache, null, 2), 'utf8', (err) => {
+                if (err) console.error("⚠️ Cache Save Error:", err.message);
+                else console.log("💾 Cache saved successfully.");
+            });
+        } catch (e) { console.error("Cache Logic Error:", e.message); }
+    }, 5000); // 5 Seconds delay
 }
 
 module.exports.listen = function (event) {
   try {
-    // V2 Validation: Ensure event exists
     if (!event || typeof event !== 'object' || event.object !== "page") return;
 
     event.entry.forEach((entry) => {
       entry.messaging.forEach(async (ev) => {
-        // V2 Validation: Ensure sender exists
         if (!ev.sender || !ev.sender.id) return;
 
         ev.type = await utils.getEventType(ev);
@@ -39,7 +48,7 @@ module.exports.listen = function (event) {
         // Cache Logic
         if (ev.message && ev.message.mid) {
           messagesCache[ev.message.mid] = { text: ev.message.text, attachments: ev.message.attachments };
-          writeToFile();
+          triggerSave(); // 🟢 CHANGED: Calls the smart saver
         }
 
         // Reply Handling
