@@ -41,9 +41,9 @@ module.exports = async function (event) {
   let cmdName = rawCmd.toLowerCase();
   let commandFound = false;
 
-  // Aliases
-  if (cmdName === "draw" || cmdName === "generate") cmdName = "deepimg";
-  if (cmdName === "search") cmdName = "webpilot";
+  // --- 🧹 CLEANED: No Hardcoded Aliases ---
+  // The 'draw', 'generate', and 'search' overrides are REMOVED.
+  // This allows the main AI (ai.js) to detect "draw" and switch to Creative Mode automatically.
 
   for (const file of commandFiles) {
     const command = require(path.join(modulesPath, file));
@@ -65,6 +65,8 @@ module.exports = async function (event) {
   }
 
   // Auto-AI Fallback
+  // If the user typed something that isn't a command (like "draw a cat"), 
+  // it falls through to here, where ai.js picks it up.
   if (!commandFound && !messageText.startsWith(config.PREFIX) && (messageText || event.message?.attachments)) {
       try {
           const aiCommand = require(path.join(modulesPath, "ai.js"));
