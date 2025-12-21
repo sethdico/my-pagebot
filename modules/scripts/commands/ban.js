@@ -1,72 +1,65 @@
 const fs = require("fs");
 const path = require("path");
-const config = require("../../../../config.json"); // Adjust path if needed
+const config = require("../../../config.json");
 
 const bannedPath = path.join(__dirname, "banned.json");
 
-// Load Banned List
-let bannedUsers = [];
-if (fs.existsSync(bannedPath)) {
-    try { bannedUsers = JSON.parse(fs.readFileSync(bannedPath)); } catch(e) {}
-} else {
-    fs.writeFileSync(bannedPath, "[]");
-}
-
 module.exports.config = {
-    name: "admin",
-    aliases: ["ban", "unban"], // These trigger the command too
-    author: "Sethdico",
-    version: "1.0",
-    category: "Admin",
-    description: "Manage users (ban/unban)",
-    adminOnly: true, // Only admins in config.json can use
-    usePrefix: false, // Allows "ban 12345" without !
-    cooldown: 0,
+  name: "admin",
+  aliases: ["ban", "unban"],
+  author: "Sethdico",
+  version: "1.2",
+  category: "Admin",
+  description: "Manage users (ban/unban)",
+  adminOnly: true,
+  usePrefix: false,
+  cooldown: 0,
 };
 
 module.exports.run = async function ({ event, args }) {
-    const action = args[0]?.toLowerCase(); // ban, unban, list
-    const targetID = args[1]; // The UID
+  const senderID = event.sender.id;
+  const messageText = event.message.text.toLowerCase();
 
-    // Security Check
-    if (!config.ADMINS.includes(event.sender.id)) {
-        return api.sendMessage("❌ You are not an admin.", event.sender.id);
-    }
+  // Ensure only real admins can use this
+  if (!config.ADMINS.includes(senderID)) {
+    return api.sendMessage("❌ Restricted: Admin access only.", senderID);
+  }
 
-    if (!action) {
-        return api.sendMessage("👮‍♂️ **Admin Panel**\nUsage:\n• ban <uid>\n• unban <uid>\n• admin list", event.sender.id);
-    }
+  // Auto-create banned.json if missing
+  if (!fs.existsSync(bannedPath)) fs.writeFileSync(bannedPath, "[]");
+  let bannedUsers = JSON.parse(fs.readFileSync(bannedPath));
 
-    // --- BAN ---
-    if (action === "ban" || event.message.text.toLowerCase().startsWith("ban")) {
-        if (!targetID) return api.sendMessage("⚠️ usage: ban <uid>", event.sender.id);
-        if (config.ADMINS.includes(targetID)) return api.sendMessage("❌ You cannot ban an admin.", event.sender.id);
-        
-        if (!bannedUsers.includes(targetID)) {
-            bannedUsers.push(targetID);
-            fs.writeFileSync(bannedPath, JSON.stringify(bannedUsers, null, 2));
-            return api.sendMessage(`🚫 **User Banned**\nUID: ${targetID}\nThey can no longer use the bot.`, event.sender.id);
-        } else {
-            return api.sendMessage("⚠️ User is already banned.", event.sender.id);
-        }
-    }
+  // Handle "ban" command
+  if (messageText.startsWith("ban")) {
+    const target = args[0]; // If using alias 'ban', the ID is the first arg
+    if (!target) return api.sendMessage("⚠️ Usage: ban <ID>", senderID);
+    if (config.ADMINS.includes(target)) return api.sendMessage("❌ You cannot ban an admin.", senderID);
 
-    // --- UNBAN ---
-    if (action === "unban" || event.message.text.toLowerCase().startsWith("unban")) {
-        if (!targetID) return api.sendMessage("⚠️ usage: unban <uid>", event.sender.id);
-        
-        const index = bannedUsers.indexOf(targetID);
-        if (index > -1) {
-            bannedUsers.splice(index, 1);
-            fs.writeFileSync(bannedPath, JSON.stringify(bannedUsers, null, 2));
-            return api.sendMessage(`✅ **User Unbanned**\nUID: ${targetID}`, event.sender.id);
-        } else {
-            return api.sendMessage("⚠️ User was not banned.", event.sender.id);
-        }
+    if (!bannedUsers.includes(target)) {
+      bannedUsers.push(target);
+      fs.writeFileSync(bannedPath, JSON.stringify(bannedUsers, null, 2));
+      api.sendMessage(`🚫 User ${target} has been banned.`, senderID);
+    } else {
+      api.sendMessage("ℹ️ User is already banned.", senderID);
     }
+  } else if (messageText.startsWith("unban")) {
+    // Handle "unban" command
+    const target = args[0];
+    if (!target) return api.sendMessage("⚠️ Usage: unban <ID>", senderID);
 
-    // --- LIST ---
-    if (action === "list") {
-        return api.sendMessage(`🚫 **Banned Users:**\n${bannedUsers.join("\n") || "None"}`, event.sender.id);
+    const index = bannedUsers.indexOf(target);
+    if (index > -1) {
+      bannedUsers.splice(index, 1);
+      fs.writeFileSync(bannedPath, JSON.stringify(bannedUsers, null, 2));
+      api.sendMessage(`✅ User ${target} has been unbanned.`, senderID);
+    } else {
+      api.sendMessage("⚠️ User is not in the ban list.", senderID);
     }
+  } else if (args[0] === "list") {
+    // Handle "admin list"
+    api.sendMessage(
+      `🚫 **Banned List:**\n${bannedUsers.join("\n") || "No banned users."}`,
+      senderID
+    );
+  }
 };
