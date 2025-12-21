@@ -1,7 +1,6 @@
 const path = require("path");
 const config = require("../config.json");
 
-// --- 🛡️ GLOBAL RATE LIMITER ---
 const rateLimitStore = new Map();
 const RATE_LIMIT = { requests: 10, windowMs: 60000 }; 
 
@@ -14,7 +13,6 @@ module.exports = async function (event) {
 
   const senderID = event.sender.id;
 
-  // --- 🛡️ RATE LIMIT CHECK ---
   const now = Date.now();
   const userTs = rateLimitStore.get(senderID) || [];
   const recentTs = userTs.filter(ts => now - ts < RATE_LIMIT.windowMs);
@@ -28,22 +26,18 @@ module.exports = async function (event) {
   recentTs.push(now);
   rateLimitStore.set(senderID, recentTs);
 
-  // --- 🧠 COMMAND LOGIC ---
   const messageText = (event.message?.text || event.postback?.payload || "").trim();
   if (!messageText && !event.message?.attachments) return;
 
-  const [rawCmd, ...args] = messageText.split(" ");
-  let cmdName = rawCmd.toLowerCase();
+  const args = messageText.split(" ");
+  let cmdName = args.shift().toLowerCase();
 
-  // Handle Prefix
   if (cmdName.startsWith(config.PREFIX)) {
       cmdName = cmdName.slice(config.PREFIX.length);
   }
 
-  // 🟢 NEW: Instant Lookup (No more looping through files!)
   let command = global.client.commands.get(cmdName);
   
-  // Check aliases if command not found
   if (!command && global.client.aliases.has(cmdName)) {
       const actualName = global.client.aliases.get(cmdName);
       command = global.client.commands.get(actualName);
@@ -57,11 +51,8 @@ module.exports = async function (event) {
           api.sendMessage("❌ Command error. Please try again.", senderID);
       }
   } else {
-      // 🔄 Auto-AI Fallback
-      // If no command matched, run AI
       if (!messageText.startsWith(config.PREFIX) && (messageText || event.message?.attachments)) {
           try {
-              // We grab AI directly from memory now
               const aiCommand = global.client.commands.get("ai"); 
               if (aiCommand) await aiCommand.run({ event, args: messageText.split(" ") });
           } catch (e) {
