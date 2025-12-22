@@ -1,10 +1,9 @@
-```javascript
 const axios = require("axios");
 
 module.exports.config = {
   name: "pokemon",
   author: "Sethdico",
-  version: "1.1",
+  version: "1.3",
   category: "Fun",
   description: "Get stats and images of a Pokémon.",
   adminOnly: false,
@@ -41,7 +40,7 @@ module.exports.run = async function ({ event, args }) {
     const defense = data.stats[2].base_stat;
     const speed = data.stats[5].base_stat;
 
-    // Official Artwork
+    // Image (Official Artwork)
     const image = data.sprites.other['official-artwork'].front_default || data.sprites.front_default;
 
     const msg = `⚡ **POKÉMON: ${name}** (#${id})
@@ -58,10 +57,12 @@ module.exports.run = async function ({ event, args }) {
 • SPD: ${speed}
 ━━━━━━━━━━━━━━━━`;
 
+    // Send Image first if available
     if (image) {
       await api.sendAttachment("image", image, senderID);
     }
 
+    // Send Stats with a button for more info
     const buttons = [
       {
         type: "web_url",
@@ -82,4 +83,3 @@ module.exports.run = async function ({ event, args }) {
     if (api.sendTypingIndicator) api.sendTypingIndicator(false, senderID);
   }
 };
-```
