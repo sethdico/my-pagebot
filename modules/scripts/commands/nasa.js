@@ -4,7 +4,7 @@ module.exports.config = {
   name: "nasa",
   author: "Sethdico",
   version: "1.1",
-  category: "Space",
+  category: "Fun",
   description: "View the Astronomy Picture of the Day from NASA.",
   adminOnly: false,
   usePrefix: false,
