@@ -1,4 +1,4 @@
-# 🤖 Amdusbot V16.5
+# 🤖 Amdusbot/My-pagebot
 The Ultimate High-Performance Multi-AI Messenger Assistant
 
 Amdusbot is a blazing-fast Facebook Messenger bot with instant command execution, admin management, and AI features.
