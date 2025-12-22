@@ -2,8 +2,8 @@ const axios = require("axios");
 module.exports.config = {
   name: "nasa",
   author: "Sethdico",
-  version: "1.0",
-  category: "Space",
+  version: "1.1",
+  category: "Fun",
   description: "View the Astronomy Picture of the Day from NASA.",
   adminOnly: false,
   usePrefix: false,
