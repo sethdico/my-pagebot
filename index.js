@@ -19,10 +19,11 @@ if (!fs.existsSync(cacheDir)) {
     console.log("🧹 SYSTEM: Cache cleared on startup.");
 }
 
-// --- 🚀 NEW: GLOBAL COMMAND LOADER ---
+// --- 🚀 GLOBAL COMMAND LOADER ---
 global.client = {
     commands: new Map(),
-    aliases: new Map()
+    aliases: new Map(),
+    cooldowns: new Map() // ✅ Added cooldown tracking
 };
 
 const commandsPath = path.join(__dirname, "modules/scripts/commands");
@@ -35,7 +36,6 @@ for (const file of commandFiles) {
         const cmd = require(path.join(commandsPath, file));
         if (cmd.config && cmd.config.name) {
             global.client.commands.set(cmd.config.name.toLowerCase(), cmd);
-            // Load aliases if they exist
             if (cmd.config.aliases && Array.isArray(cmd.config.aliases)) {
                 cmd.config.aliases.forEach(alias => {
                     global.client.aliases.set(alias.toLowerCase(), cmd.config.name.toLowerCase());
@@ -68,12 +68,24 @@ app.post("/webhook", (req, res) => {
     res.sendStatus(200);
 });
 
-// --- 🚨 GLOBAL ERROR HANDLER ---
+// --- 🚨 GLOBAL ERROR HANDLER (Fixed) ---
 app.use((err, req, res, next) => {
   console.error("🔥 Critical Server Error:", err.stack);
   res.status(500).send("Internal Server Error");
+  
+  // ✅ Log to file for debugging
+  const errorLog = `[${new Date().toISOString()}] ${err.stack}\n`;
+  fs.appendFile(path.join(__dirname, "error.log"), errorLog, () => {});
 });
 
-app.listen(process.env.PORT || 8080, () => {
+// ✅ Graceful shutdown
+process.on('SIGTERM', () => {
+  console.log('SIGTERM received, shutting down gracefully...');
+  process.exit(0);
+});
+
+const PORT = process.env.PORT || 8080;
+app.listen(PORT, () => {
   web.log();
+  console.log(`✅ Server running on port ${PORT}`);
 });
