@@ -14,10 +14,11 @@ function getEventType(event) {
 }
 
 function log(event) {
-  let sender = config.ADMINS.includes(event.sender?.id) ? "ADMIN" : "USER";
+  // ✅ Fixed: Check both ADMIN and ADMINS
+  const adminList = config.ADMINS || config.ADMIN || [];
+  let sender = adminList.includes(event.sender?.id) ? "ADMIN" : "USER";
   if (event.message?.is_echo) sender = "BOT";
   
-  // V2 Feature: Mask User ID (Show only last 4 digits)
   const maskedId = event.sender?.id ? `...${event.sender.id.slice(-4)}` : "unknown";
   
   console.log(`${theme.gradient.multiline(sender)} (${maskedId}): Event Received`);
