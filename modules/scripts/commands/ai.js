@@ -75,9 +75,9 @@ async function sendYouTubeThumbnail(youtubeUrl, senderID, api) {
 module.exports.config = {
   name: "ai",
   author: "Sethdico",
-  version: "25.2-ToT-CoVe", 
+  version: "25.3-FixedDL", 
   category: "AI",
-  description: "Advanced Hybrid AI Optimized for High Daily Traffic. Features: Persistent Memory, Specialized Creative Mode, Analytical ToT/CoVe Logic (Hidden), Vision Analysis, and YouTube Previews. Created by Seth Asher Salinguhay.",
+  description: "Advanced Hybrid AI. Features: Memory, Creative Mode, ToT/CoVe Logic, Vision, YouTube Previews, and Fixed File Downloads.",
   adminOnly: false,
   usePrefix: false,
   cooldown: 0, 
@@ -135,7 +135,6 @@ module.exports.run = async function ({ event, args }) {
     if (isCreation || isEditing) {
         systemPrompt += `\n[MODE: CREATIVE]: Act as a World-Class Artist. Use descriptive, technical art language.`;
     } else {
-        // ADDED TOT & COVE LOGIC HERE
         systemPrompt += `\n[MODE: ANALYTICAL]: 
 1. Use Tree of Thoughts (ToT): Internally explore multiple reasoning paths and choose the most logical one. 
 2. Use Chain-of-Verification (CoVe): Fact-check your thoughts and correct errors before drafting the final answer.
@@ -167,12 +166,15 @@ module.exports.run = async function ({ event, args }) {
       saveSessions();
     }
 
+    // --- 🛠️ FIXED FILE HANDLER START ---
     const fileRegex = /(https?:\/\/app\.chipp\.ai\/api\/downloads\/downloadFile[^)\s"]+|https?:\/\/(?!(?:scontent|static)\.xx\.fbcdn\.net)[^)\s"]+\.(?:pdf|docx|doc|xlsx|xls|pptx|ppt|txt|csv|zip|rar|7z|jpg|jpeg|png|gif|mp3|wav|mp4))/i;
     const match = replyContent.match(fileRegex);
 
     if (match) {
       const fileUrl = match[0].replace(/[).,]+$/, ""); 
       const textMessage = replyContent.replace(match[0], "").trim();
+      
+      // Send the text part first
       if (textMessage) await api.sendMessage(textMessage, senderID);
 
       let fileName = `amdus_${Date.now()}.bin`;
@@ -183,35 +185,41 @@ module.exports.run = async function ({ event, args }) {
           } else {
             fileName = path.basename(fileUrl.split('?')[0]);
           }
+          // Sanitize filename
           fileName = decodeURIComponent(fileName).replace(/[^a-zA-Z0-9._-]/g, "_"); 
       } catch (e) {}
 
       const filePath = path.join(CACHE_DIR, fileName);
-      const fileWriter = fs.createWriteStream(filePath);
 
       try {
-          const fileRes = await axios({ url: fileUrl, method: 'GET', responseType: 'stream' });
-          fileRes.data.pipe(fileWriter);
-          await new Promise((resolve, reject) => {
-              fileWriter.on('finish', resolve);
-              fileWriter.on('error', reject);
+          // 🛠️ FIX: Use arraybuffer instead of stream to ensure complete download before writing
+          const fileRes = await axios.get(fileUrl, { 
+              responseType: 'arraybuffer',
+              headers: { "User-Agent": "Mozilla/5.0" } // Prevents some 403 errors
           });
+          
+          fs.writeFileSync(filePath, Buffer.from(fileRes.data));
 
           if (fs.statSync(filePath).size > 24 * 1024 * 1024) {
-             await api.sendMessage(`📂 File is too big for Facebook. Link: ${fileUrl}`, senderID);
+             await api.sendMessage(`📂 File is too big for Facebook (>25MB). Link: ${fileUrl}`, senderID);
           } else {
              const ext = path.extname(fileName).toLowerCase();
              const type = [".jpg", ".jpeg", ".png", ".gif", ".webp"].includes(ext) ? "image" : "file";
+             
+             // Send the fully saved file
              await api.sendAttachment(type, filePath, senderID);
           }
       } catch (e) {
-          await api.sendMessage(`📂 Failed to attach. Link: ${fileUrl}`, senderID);
+          console.error("Download/Send Error:", e.message);
+          await api.sendMessage(`📂 Failed to attach file directly. Link: ${fileUrl}`, senderID);
       } finally {
+          // Clean up after 30 seconds
           setTimeout(() => { if (fs.existsSync(filePath)) fs.unlink(filePath, () => {}); }, 30000);
       }
     } else {
       await api.sendMessage(replyContent, senderID);
     }
+    // --- 🛠️ FIXED FILE HANDLER END ---
 
     if (api.setMessageReaction) api.setMessageReaction("✅", mid);
 
