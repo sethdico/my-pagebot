@@ -11,7 +11,7 @@ module.exports.config = {
 };
 module.exports.run = async function ({ event, args }) {
   const senderID = event.sender.id;
-  const NASA_API_KEY = "CXbr4ovi6dMLNxbV9XfgBxyskEMbt1Mti7YmXx50";
+  const NASA_API_KEY = "CXbr4ovi6dMLNxbV9XfgBxyskEMbt1Mti7YmXx50"; // Using DEMO_KEY usually works for low volume, or stick to your previous key if valid
   // Check if user wants a random date
   const isRandom = args[0]?.toLowerCase() === "random";
   let apiUrl = `https:                                                       
@@ -44,11 +44,7 @@ module.exports.run = async function ({ event, args }) {
     const explanation = data.explanation || "No description provided.";
     const mediaType = data.media_type; // 'image' or 'video'
     const hdUrl = data.hdurl || data.url;
-    let msg = `🌌 **NASA: ${title.toUpperCase()}**
-━━━━━━━━━━━━━━━━
-📅 **Date:** ${date}
-📝 **Explanation:** ${explanation.length > 500 ? explanation.substring(0, 500) + "..." : explanation}
-━━━━━━━━━━━━━━━━`;
+    let msg = `🌌 **NASA: ${title.toUpperCase()}** ━━━━━━━━━━━━━━━━ 📅 **Date:** ${date} 📝 **Explanation:** ${explanation.length > 500 ? explanation.substring(0, 500) + "..." : explanation} ━━━━━━━━━━━━━━━━`;
                    
     if (mediaType === "image") {
       await api.sendAttachment("image", hdUrl, senderID);
@@ -60,21 +56,13 @@ module.exports.run = async function ({ event, args }) {
       msg += `\n\n🎥 **Video Link:** ${hdUrl}`;
     }
     const buttons = [
-      {
-        type: "postback",
-        title: "🎲 Random Date",
-        payload: "nasa random"
-      },
-      {
-        type: "web_url",
-        url: hdUrl,
-        title: "🖼️ View High-Res"
-      }
+      { type: "postback", title: "🎲 Random Date", payload: "nasa random" },
+      { type: "web_url", url: hdUrl, title: "🖼️ View High-Res" }
     ];
     await api.sendButton(msg, buttons, senderID);
   } catch (error) {
     console.error("NASA API Error:", error.message);
-    api.sendMessage("❌ Error connecting to NASA. Make sure the API key is active!", senderID);
+    api.sendMessage("❌ Error connecting to NASA. Try again later!", senderID);
   } finally {
     api.sendTypingIndicator(false, senderID);
   }
