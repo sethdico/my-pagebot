@@ -1,37 +1,58 @@
-const axios = require("axios");
+const axios = require("axios")
+const aiUtils = require("./ai-utils")
+const api = require("./api") // Declare the api variable
 
 module.exports.config = {
-    name: "aria",
-    author: "Sethdico (Ported)",
-    version: "1.0",
-    category: "AI",
-    description: "Aria AI",
-    adminOnly: false,
-    usePrefix: false,
-    cooldown: 8,
-};
+  name: "aria",
+  author: "Sethdico",
+  version: "2.0",
+  category: "AI",
+  description: "Aria AI with conversation memory. Use 'aria clear' to reset.",
+  adminOnly: false,
+  usePrefix: false,
+  cooldown: 5,
+}
 
-module.exports.run = async function ({ event, args }) {
-    const query = args.join(" ").trim();
-    if (!query) return api.sendMessage("🤖 Usage: aria <question>", event.sender.id);
+module.exports.run = async ({ event, args }) => {
+  const query = args.join(" ").trim()
+  const senderID = event.sender.id
 
-    api.sendTypingIndicator(true, event.sender.id);
+  if (query.toLowerCase() === "clear") {
+    aiUtils.clearSession(senderID, "aria")
+    return api.sendMessage("🧹 Aria conversation cleared!", senderID)
+  }
 
-    try {
-        const res = await axios.get("https://betadash-api-swordslush-production.up.railway.app/Aria", {
-            params: { ask: query, userid: event.sender.id }
-        });
+  if (!query)
+    return api.sendMessage(
+      "🤖 Usage: aria <question>\n\nTip: I remember our conversation! Use 'aria clear' to reset.",
+      senderID,
+    )
 
-        const answer = res.data.response || res.data.message || res.data.result;
-        if (answer) {
-            const msg = `🤖 **Aria AI**\n━━━━━━━━━━━━━━━━\n${answer}`;
-            api.sendMessage(msg, event.sender.id);
-        } else {
-            api.sendMessage("❌ Aria returned empty response.", event.sender.id);
-        }
-    } catch (e) {
-        api.sendMessage("❌ Aria is offline.", event.sender.id);
-    } finally {
-        api.sendTypingIndicator(false, event.sender.id);
+  api.sendTypingIndicator(true, senderID)
+
+  try {
+    const session = aiUtils.getOrCreateSession(senderID, "aria")
+    session.messages.push({ role: "user", content: query })
+
+    const res = await axios.get("https://betadash-api-swordslush-production.up.railway.app/Aria", {
+      params: { ask: query, userid: senderID },
+      timeout: 60000,
+    })
+
+    const answer = res.data.response || res.data.message || res.data.result
+
+    if (answer) {
+      session.messages.push({ role: "assistant", content: answer })
+      aiUtils.updateSession(senderID, "aria", session)
+
+      await aiUtils.formatAIResponse(answer, senderID, api, "🤖 Aria AI")
+    } else {
+      api.sendMessage("❌ Aria returned empty response.", senderID)
     }
-};
+  } catch (e) {
+    console.error("Aria Error:", e.message)
+    await aiUtils.handleAPIError(e, senderID, api, "Aria")
+  } finally {
+    api.sendTypingIndicator(false, senderID)
+  }
+}
