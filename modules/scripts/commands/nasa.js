@@ -1,18 +1,18 @@
 const axios = require("axios");
 
-// === IN-MEMORY CACHE ===
+// Cache for "Today's" picture only
 let apodCache = { data: null, timestamp: 0 };
-const CACHE_DURATION = 4 * 60 * 60 * 1000; // Cache for 4 hours (safe update window)
+const CACHE_DURATION = 4 * 60 * 60 * 1000; 
 
 module.exports.config = {
   name: "nasa",
-  author: "Sethdico (Optimized)",
-  version: "3.0-Cached",
+  author: "Sethdico (Carousel-Mode)",
+  version: "4.0",
   category: "Fun",
-  description: "NASA APOD with 24h caching for speed.",
+  description: "NASA APOD. Use 'nasa random' for a gallery view.",
   adminOnly: false,
   usePrefix: false,
-  cooldown: 2,
+  cooldown: 5,
 };
 
 module.exports.run = async ({ event, args, api }) => {
@@ -20,56 +20,81 @@ module.exports.run = async ({ event, args, api }) => {
   const isRandom = args[0]?.toLowerCase() === "random";
   const dateQuery = args[0] && /^\d{4}-\d{2}-\d{2}$/.test(args[0]) ? args[0] : null;
 
-  // Fire-and-forget typing indicator
-  if (api.sendTypingIndicator) api.sendTypingIndicator(true, senderID).catch(() => {});
+  if (api.sendTypingIndicator) api.sendTypingIndicator(true, senderID).catch(()=>{});
 
   try {
-    let data;
+    const apiKey = "DEMO_KEY"; // Replace with yours if rate limited
 
-    // 1. CHECK CACHE (If asking for today's picture)
-    const now = Date.now();
-    if (!isRandom && !dateQuery && apodCache.data && (now - apodCache.timestamp < CACHE_DURATION)) {
-      console.log("🚀 Serving NASA APOD from Cache");
-      data = apodCache.data;
-    } else {
-      // 2. FETCH FROM API
-      const apiKey = "DEMO_KEY"; // Or your specific key
-      let url = `https://api.nasa.gov/planetary/apod?api_key=${apiKey}`;
-      
-      if (isRandom) url += "&count=1";
-      if (dateQuery) url += `&date=${dateQuery}`;
+    // --- CAROUSEL MODE (Random) ---
+    if (isRandom) {
+      // Fetch 5 random images
+      const url = `https://api.nasa.gov/planetary/apod?api_key=${apiKey}&count=5`;
+      const res = await axios.get(url, { timeout: 15000 });
+      const data = res.data.filter(item => item.media_type === "image"); // Carousels need images
 
-      const res = await axios.get(url, { timeout: 10000 });
-      data = Array.isArray(res.data) ? res.data[0] : res.data;
+      if (data.length === 0) return api.sendMessage("❌ No random images found.", senderID);
 
-      // Update Cache if it's the standard daily request
-      if (!isRandom && !dateQuery) {
-        apodCache = { data, timestamp: now };
+      // Map to Carousel Elements
+      const elements = data.map(item => ({
+        title: item.title,
+        subtitle: item.date,
+        image_url: item.url,
+        buttons: [
+            { 
+                type: "web_url", 
+                url: item.hdurl || item.url, 
+                title: "🖼️ High Res" 
+            },
+            {
+                type: "web_url",
+                url: "https://apod.nasa.gov/apod/astropix.html",
+                title: "📚 Source"
+            }
+        ]
+      }));
+
+      // Send Carousel
+      if (api.sendCarousel) {
+          await api.sendCarousel(elements, senderID);
+      } else {
+          // Fallback if sendCarousel isn't loaded
+          api.sendAttachment("image", data[0].url, senderID);
       }
+      return;
     }
 
-    // 3. FORMAT MESSAGE
-    const title = data.title || "Space Image";
-    const date = data.date || "Unknown Date";
-    const copyright = data.copyright ? `\n📸 © ${data.copyright}` : "";
-    const description = data.explanation 
-      ? (data.explanation.length > 300 ? data.explanation.substring(0, 300) + "..." : data.explanation)
-      : "No description.";
-
-    const msg = `🌌 **${title.toUpperCase()}**\n━━━━━━━━━━━━━━━━\n📅 ${date}${copyright}\n\n${description}`;
-
-    // 4. SEND (Handle Video vs Image)
-    if (data.media_type === "video") {
-      await api.sendMessage(`${msg}\n\n🎥 **Watch:** ${data.url}`, senderID);
+    // --- STANDARD MODE (Today/Specific Date) ---
+    let data;
+    const now = Date.now();
+    
+    // Check Cache
+    if (!dateQuery && apodCache.data && (now - apodCache.timestamp < CACHE_DURATION)) {
+      data = apodCache.data;
     } else {
-      await api.sendAttachment("image", data.hdurl || data.url, senderID);
-      await api.sendMessage(msg, senderID); // Send text separately to ensure image loads first/cleaner
+      let url = `https://api.nasa.gov/planetary/apod?api_key=${apiKey}`;
+      if (dateQuery) url += `&date=${dateQuery}`;
+      const res = await axios.get(url);
+      data = res.data;
+      if (!dateQuery) apodCache = { data, timestamp: now };
+    }
+
+    // Single Message logic
+    const title = data.title || "Space Image";
+    const desc = data.explanation ? (data.explanation.substring(0, 300) + "...") : "No desc.";
+    const msg = `🌌 **${title}**\n📅 ${data.date}\n━━━━━━━━━━━━━━━━\n${desc}`;
+
+    if (data.media_type === "video") {
+      api.sendMessage(`${msg}\n\n🎥 **Watch:** ${data.url}`, senderID);
+    } else {
+      // Send image first, then text
+      api.sendAttachment("image", data.hdurl || data.url, senderID).catch(()=>{});
+      api.sendMessage(msg, senderID);
     }
 
   } catch (error) {
     console.error("NASA Error:", error.message);
-    api.sendMessage("❌ Failed to contact NASA. Try 'nasa random'.", senderID);
+    api.sendMessage("❌ NASA API is momentarily down.", senderID);
   } finally {
-    if (api.sendTypingIndicator) api.sendTypingIndicator(false, senderID).catch(() => {});
+    if (api.sendTypingIndicator) api.sendTypingIndicator(false, senderID).catch(()=>{});
   }
 };
