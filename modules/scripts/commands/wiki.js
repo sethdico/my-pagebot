@@ -1,185 +1,102 @@
 const axios = require("axios");
 
-// === IN-MEMORY CACHE (O(1) Access) ===
-// Stores results for 1 hour to prevent spamming Wikipedia API
+// Cache Map (O(1))
 const wikiCache = new Map();
-const CACHE_TTL = 60 * 60 * 1000; 
+const CACHE_TTL = 3600000; // 1 Hour
 
-// Simple header to be polite to Wikipedia API
-const HEADERS = {
-    'User-Agent': 'Amdusbot/4.0 (FacebookBot; contact: your-email@example.com)'
-};
+const HEADERS = { 'User-Agent': 'Amdusbot/4.0' };
 
 module.exports.config = {
     name: "wiki",
-    author: "Sethdico (Optimized)",
-    version: "4.0-SmartSearch",
+    author: "Sethdico (Carousel-Mode)",
+    version: "4.5",
     category: "Utility",
-    description: "Smart Wiki: Auto-corrects text, supports PDF & Multilingual.",
+    description: "Wikipedia.",
     adminOnly: false,
     usePrefix: false,
-    cooldown: 3,
+    cooldown: 5,
 };
 
 module.exports.run = async function ({ event, args, api }) {
     const senderID = event.sender.id;
     let query = args.join(" ").trim();
-    let lang = "en"; // Default
+    let lang = "en";
 
-    // 1. HELP MENU
-    if (!query) {
-        return api.sendMessage(
-            "📚 **Wiki Guide**\n━━━━━━━━━━━━━━━━\n" +
-            "🔍 **Search:** `wiki Goodnight Punpun` (Case insensitive)\n" +
-            "🇵🇭 **Tagalog:** `wiki tl Jose Rizal`\n" +
-            "📅 **History:** `wiki today`\n" +
-            "📄 **PDF:** `wiki pdf gravity`\n" +
-            "🎲 **Random:** `wiki random`", 
-            senderID
-        );
-    }
-
-    // 2. FEATURE: ON THIS DAY
-    if (query.toLowerCase() === "today") return handleOnThisDay(api, senderID);
-
-    // 3. FEATURE: RANDOM
-    if (query.toLowerCase() === "random") return handleRandom(api, senderID, "en");
-
-    // 4. LANGUAGE DETECTION (e.g., "wiki tl ...")
-    // If first word is 2 letters and matches a language code pattern
-    if (args[0].length === 2 && args.length > 1) {
-        const potentialLang = args[0].toLowerCase();
-        // Simple validation: strictly 2 letters
-        if (/^[a-z]{2}$/.test(potentialLang)) {
-            lang = potentialLang;
+    // Language switch
+    if (args[0]?.length === 2 && args.length > 1) {
+        if (/^[a-z]{2}$/.test(args[0])) {
+            lang = args[0].toLowerCase();
             query = args.slice(1).join(" ");
         }
     }
 
-    // 5. FEATURE: PDF
-    let isPdf = false;
-    if (args[0].toLowerCase() === "pdf") {
-        isPdf = true;
-        query = args.slice(1).join(" ");
-    }
-
-    // Fire and forget typing
+    if (!query) return api.sendMessage("🔍 Usage: wiki <topic>", senderID);
     if (api.sendTypingIndicator) api.sendTypingIndicator(true, senderID).catch(()=>{});
 
-    // 6. CHECK CACHE
+    // Check Cache
     const cacheKey = `${lang}_${query.toLowerCase()}`;
-    if (!isPdf && wikiCache.has(cacheKey)) {
+    if (wikiCache.has(cacheKey)) {
         const cached = wikiCache.get(cacheKey);
         if (Date.now() - cached.timestamp < CACHE_TTL) {
-            console.log(`🚀 Serving Wiki cache: ${query}`);
-            return sendWikiResult(api, senderID, cached.data);
-        } else {
-            wikiCache.delete(cacheKey); // Expired
+            return api.sendCarousel(cached.elements, senderID);
         }
     }
 
-    // 7. EXECUTE SMART SEARCH
     try {
-        // STEP A: Perform an "OpenSearch" to find the CORRECT title/slug
-        // This fixes the "case sensitive" issue. 
-        // Input: "goodnight punpun" -> Output: "Goodnight Punpun"
-        const searchUrl = `https://${lang}.wikipedia.org/w/api.php`;
-        const searchRes = await axios.get(searchUrl, {
-            params: {
-                action: "opensearch",
-                search: query,
-                limit: 1,
-                namespace: 0,
-                format: "json"
-            }
+        // 1. Smart Search (OpenSearch) to get correct title
+        const searchRes = await axios.get(`https://${lang}.wikipedia.org/w/api.php`, {
+            params: { action: "opensearch", search: query, limit: 1, namespace: 0, format: "json" }
         });
 
-        // opensearch returns: [query, [Titles], [Descriptions], [Links]]
-        if (!searchRes.data[1] || searchRes.data[1].length === 0) {
-            return api.sendMessage(`❌ No results found for "${query}" in ${lang.toUpperCase()}.`, senderID);
-        }
+        if (!searchRes.data[1]?.length) return api.sendMessage(`❌ No results for "${query}".`, senderID);
+        const correctTitle = searchRes.data[1][0];
 
-        const correctTitle = searchRes.data[1][0]; // The official Wikipedia title
-        
-        // STEP B: Handle PDF Request
-        if (isPdf) {
-            const pdfUrl = `https://${lang}.wikipedia.org/api/rest_v1/page/pdf/${encodeURIComponent(correctTitle)}`;
-            const buttons = [{ type: "web_url", url: pdfUrl, title: "📥 Download PDF" }];
-            return api.sendButton(`📄 **PDF Ready**\nOfficial PDF for "${correctTitle}".`, buttons, senderID);
-        }
-
-        // STEP C: Fetch Summary using the Correct Title
+        // 2. Fetch Summary (Main Card)
         const summaryUrl = `https://${lang}.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(correctTitle)}`;
         const summaryRes = await axios.get(summaryUrl, { headers: HEADERS });
-        const data = summaryRes.data;
+        const mainData = summaryRes.data;
 
-        // Disambiguation handling
-        if (data.type === "disambiguation") {
-            return api.sendMessage(`⚠️ **Ambiguous:** "${correctTitle}" refers to multiple things. Please be more specific.`, senderID);
+        // 3. Fetch Related Pages (Next Cards)
+        const relatedUrl = `https://${lang}.wikipedia.org/api/rest_v1/page/related/${encodeURIComponent(correctTitle)}`;
+        let relatedData = [];
+        try {
+            const relRes = await axios.get(relatedUrl, { headers: HEADERS, timeout: 3000 });
+            relatedData = relRes.data.pages || [];
+        } catch (e) { /* Ignore related fail */ }
+
+        // 4. Build Carousel Elements
+        const elements = [];
+
+        // Add Main Card
+        elements.push({
+            title: mainData.title,
+            subtitle: mainData.extract ? mainData.extract.substring(0, 80) + "..." : "Read article...",
+            image_url: mainData.originalimage?.source || mainData.thumbnail?.source || "https://upload.wikimedia.org/wikipedia/commons/thumb/8/80/Wikipedia-logo-v2.svg/1200px-Wikipedia-logo-v2.svg.png",
+            buttons: [{ type: "web_url", url: mainData.content_urls.desktop.page, title: "📖 Read" }]
+        });
+
+        // Add up to 4 Related Cards
+        relatedData.slice(0, 4).forEach(page => {
+            elements.push({
+                title: page.title,
+                subtitle: page.extract ? page.extract.substring(0, 80) + "..." : "Related topic",
+                image_url: page.originalimage?.source || page.thumbnail?.source || "https://upload.wikimedia.org/wikipedia/commons/thumb/8/80/Wikipedia-logo-v2.svg/1200px-Wikipedia-logo-v2.svg.png",
+                buttons: [{ type: "web_url", url: page.content_urls.desktop.page, title: "📖 Read" }]
+            });
+        });
+
+        // Save Cache
+        wikiCache.set(cacheKey, { elements, timestamp: Date.now() });
+
+        // Send
+        if (api.sendCarousel && elements.length > 0) {
+            await api.sendCarousel(elements, senderID);
+        } else {
+            api.sendMessage(`📚 **${mainData.title}**\n${mainData.extract}`, senderID);
         }
 
-        // Save to Cache
-        wikiCache.set(cacheKey, { data: data, timestamp: Date.now() });
-
-        // Output
-        await sendWikiResult(api, senderID, data);
-
-    } catch (error) {
-        console.error("Wiki Error:", error.message);
-        api.sendMessage("❌ Wiki is currently unavailable or the topic doesn't exist.", senderID);
+    } catch (e) {
+        console.error("Wiki error:", e.message);
+        api.sendMessage("❌ Wiki lookup failed.", senderID);
     }
 };
-
-// ============================================================
-// 🛠️ HELPER FUNCTIONS
-// ============================================================
-
-async function sendWikiResult(api, senderID, data) {
-    const title = data.title;
-    const summary = data.extract || "No description available.";
-    const pageUrl = data.content_urls.desktop.page;
-    const imgUrl = data.originalimage?.source || data.thumbnail?.source;
-
-    // Send Image if exists
-    if (imgUrl) {
-        // Fire and forget image to make text appear faster
-        api.sendAttachment("image", imgUrl, senderID).catch(()=>{});
-    }
-
-    const buttons = [{ type: "web_url", url: pageUrl, title: "📖 Read Article" }];
-    const msg = `📚 **${title.toUpperCase()}**\n━━━━━━━━━━━━━━━━\n${summary}`;
-
-    await api.sendButton(msg, buttons, senderID);
-}
-
-async function handleOnThisDay(api, senderID) {
-    try {
-        const date = new Date();
-        const mm = String(date.getMonth() + 1).padStart(2, '0');
-        const dd = String(date.getDate()).padStart(2, '0');
-
-        const url = `https://en.wikipedia.org/api/rest_v1/feed/onthisday/selected/${mm}/${dd}`;
-        const res = await axios.get(url, { headers: HEADERS });
-        
-        // Get 3 Random Events to keep it fresh
-        const events = res.data.selected.sort(() => 0.5 - Math.random()).slice(0, 3);
-        
-        let msg = `📅 **ON THIS DAY (${mm}/${dd})**\n━━━━━━━━━━━━━━━━\n`;
-        events.forEach(e => msg += `• **${e.year}**: ${e.text}\n\n`);
-
-        const buttons = [{ type: "web_url", url: res.data.content_urls?.desktop?.page || "https://en.wikipedia.org", title: "📜 Full List" }];
-        api.sendButton(msg, buttons, senderID);
-    } catch (e) {
-        api.sendMessage("❌ Failed to fetch history.", senderID);
-    }
-}
-
-async function handleRandom(api, senderID, lang) {
-    try {
-        const url = `https://${lang}.wikipedia.org/api/rest_v1/page/random/summary`;
-        const res = await axios.get(url, { headers: HEADERS });
-        sendWikiResult(api, senderID, res.data);
-    } catch (e) {
-        api.sendMessage("❌ Random fetch failed.", senderID);
-    }
-}
