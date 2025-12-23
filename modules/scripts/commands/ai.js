@@ -43,7 +43,7 @@ module.exports.config = {
   author: "Sethdico",
   version: "16.5-Stable", // Version updated
   category: "AI",
-  description: "Advanced Multi-AI: Vision, Web Search, File Gen, and Chat.",
+  description: "Advanced Multi-AI: Vision, Web Search, and Chat.",
   adminOnly: false,
   usePrefix: false,
   cooldown: 0, 
