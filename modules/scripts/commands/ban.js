@@ -8,9 +8,9 @@ module.exports.config = {
   name: "admin",
   aliases: ["ban", "unban"],
   author: "Sethdico",
-  version: "1.3-Fixed",
+  version: "2.0-Optimized",
   category: "Admin",
-  description: "Manage users (ban/unban)",
+  description: "Manage users (ban/unban) - O(1) Performance",
   adminOnly: true,
   usePrefix: false,
   cooldown: 0,
@@ -20,16 +20,14 @@ module.exports.run = async function ({ event, args, api }) {
   const senderID = event.sender.id;
   const messageText = event.message.text.toLowerCase();
 
-  // ✅ Fixed: Check both ADMIN and ADMINS
+  // Check Permissions
   const adminList = config.ADMINS || config.ADMIN || [];
   if (!adminList.includes(senderID)) {
     return api.sendMessage("❌ Restricted: Admin access only.", senderID);
   }
 
-  if (!fs.existsSync(bannedPath)) {
-    fs.writeFileSync(bannedPath, "[]");
-  }
-  let bannedUsers = JSON.parse(fs.readFileSync(bannedPath));
+  // Ensure global set exists (safety check)
+  if (!global.BANNED_USERS) global.BANNED_USERS = new Set();
 
   if (messageText.startsWith("ban")) {
     const target = args[0];
@@ -38,29 +36,48 @@ module.exports.run = async function ({ event, args, api }) {
       return api.sendMessage("❌ You cannot ban an admin.", senderID);
     }
 
-    if (!bannedUsers.includes(target)) {
-      bannedUsers.push(target);
-      fs.writeFileSync(bannedPath, JSON.stringify(bannedUsers, null, 2));
+    // ✅ O(1) Check and Insert
+    if (!global.BANNED_USERS.has(target)) {
+      global.BANNED_USERS.add(target);
+      
+      // Async save (Non-blocking)
+      saveBannedList();
+      
       api.sendMessage(`🚫 User ${target} has been banned.`, senderID);
     } else {
       api.sendMessage("ℹ️ User is already banned.", senderID);
     }
+
   } else if (messageText.startsWith("unban")) {
     const target = args[0];
     if (!target) return api.sendMessage("⚠️ Usage: unban <ID>", senderID);
 
-    const index = bannedUsers.indexOf(target);
-    if (index > -1) {
-      bannedUsers.splice(index, 1);
-      fs.writeFileSync(bannedPath, JSON.stringify(bannedUsers, null, 2));
+    // ✅ O(1) Check and Delete
+    if (global.BANNED_USERS.has(target)) {
+      global.BANNED_USERS.delete(target);
+      
+      // Async save (Non-blocking)
+      saveBannedList();
+      
       api.sendMessage(`✅ User ${target} has been unbanned.`, senderID);
     } else {
       api.sendMessage("⚠️ User is not in the ban list.", senderID);
     }
+
   } else if (args[0] === "list") {
+    // Convert Set to Array for display
+    const list = Array.from(global.BANNED_USERS);
     api.sendMessage(
-      `🚫 **Banned List:**\n${bannedUsers.join("\n") || "No banned users."}`,
+      `🚫 **Banned List:**\n${list.join("\n") || "No banned users."}`,
       senderID
     );
   }
 };
+
+// Helper to save file asynchronously
+function saveBannedList() {
+    const data = JSON.stringify(Array.from(global.BANNED_USERS), null, 2);
+    fs.writeFile(bannedPath, data, (err) => {
+        if (err) console.error("❌ Failed to save banned list to disk:", err);
+    });
+}
