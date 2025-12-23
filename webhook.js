@@ -4,55 +4,50 @@ const fs = require("fs").promises;
 const fsSync = require("fs");
 const path = require("path");
 
-let messagesCache = {};
+// ✅ OPTIMIZATION: Use Map for O(1) insertions and FIFO order
+let messagesCache = new Map();
 const messagesFilePath = path.join(__dirname, "page/data.json");
-const bannedPath = path.join(__dirname, "modules/scripts/commands/banned.json");
 
 let saveTimer = null;
-let isSaving = false; // ✅ Prevent race conditions
+let isSaving = false;
 
-// ✅ Load cache on startup
+// ✅ Load cache on startup and convert to Map
 (async function loadCache() {
   if (fsSync.existsSync(messagesFilePath)) {
     try {
       const data = await fs.readFile(messagesFilePath, "utf8");
-      messagesCache = JSON.parse(data);
-      console.log(`📦 Loaded ${Object.keys(messagesCache).length} cached messages`);
+      const json = JSON.parse(data);
+      // Convert Object back to Map
+      messagesCache = new Map(Object.entries(json));
+      console.log(`📦 Loaded ${messagesCache.size} cached messages`);
     } catch (e) {
       console.error("⚠️ Cache file corrupted, starting fresh:", e.message);
-      messagesCache = {};
+      messagesCache = new Map();
     }
   }
 })();
 
-// ✅ Fixed save function with mutex
+// ✅ OPTIMIZATION: Trigger Save with O(1) Pruning (No sorting)
 async function triggerSave() {
   if (saveTimer) clearTimeout(saveTimer);
   
   saveTimer = setTimeout(async () => {
-    if (isSaving) return; // Prevent concurrent saves
+    if (isSaving) return;
     isSaving = true;
     
     try {
-      const keys = Object.keys(messagesCache);
-      
-      // Trim old messages
-      if (keys.length > 1000) {
-        const sorted = keys.sort((a, b) => {
-          const timeA = messagesCache[a].timestamp || 0;
-          const timeB = messagesCache[b].timestamp || 0;
-          return timeB - timeA; // Newest first
-        });
-        
-        const toKeep = sorted.slice(0, 1000);
-        const newCache = {};
-        toKeep.forEach(key => newCache[key] = messagesCache[key]);
-        messagesCache = newCache;
-        
-        console.log(`🧹 Trimmed cache: kept ${toKeep.length} newest messages`);
+      // ✅ O(1) Pruning: Javascript Maps preserve insertion order.
+      // The first item in the iterator is the oldest.
+      // We just delete from the front until size is 1000.
+      while (messagesCache.size > 1000) {
+        const oldestKey = messagesCache.keys().next().value;
+        messagesCache.delete(oldestKey);
       }
       
-      await fs.writeFile(messagesFilePath, JSON.stringify(messagesCache, null, 2), "utf8");
+      // Convert Map to Object for saving
+      const cacheObj = Object.fromEntries(messagesCache);
+      await fs.writeFile(messagesFilePath, JSON.stringify(cacheObj, null, 2), "utf8");
+      
     } catch (e) {
       console.error("⚠️ Cache Save Error:", e.message);
     } finally {
@@ -65,21 +60,13 @@ module.exports.listen = (event) => {
   try {
     if (!event || typeof event !== "object" || event.object !== "page") return;
 
-    let bannedList = [];
-    if (fsSync.existsSync(bannedPath)) {
-      try {
-        bannedList = JSON.parse(fsSync.readFileSync(bannedPath));
-      } catch (e) {
-        console.error("⚠️ Banned list corrupted:", e.message);
-        bannedList = [];
-      }
-    }
-
     event.entry.forEach((entry) => {
       entry.messaging.forEach(async (ev) => {
         if (!ev.sender || !ev.sender.id) return;
 
-        if (bannedList.includes(ev.sender.id)) {
+        // ✅ OPTIMIZATION: O(1) Lookup using Global Set
+        // No file reading here!
+        if (global.BANNED_USERS && global.BANNED_USERS.has(ev.sender.id)) {
           console.log(`🚫 Blocked message from banned user: ${ev.sender.id}`);
           return;
         }
@@ -87,21 +74,29 @@ module.exports.listen = (event) => {
         ev.type = await utils.getEventType(ev);
         global.PAGE_ACCESS_TOKEN = process.env.PAGE_ACCESS_TOKEN || config.PAGE_ACCESS_TOKEN;
 
+        // ✅ Cache Logic using Map
         if (ev.message && ev.message.mid) {
-          messagesCache[ev.message.mid] = {
+          // Deleting and re-setting ensures the key moves to the "end" (newest)
+          // ensuring accurate LRU behavior even if ID existed
+          if (messagesCache.has(ev.message.mid)) {
+              messagesCache.delete(ev.message.mid);
+          }
+          messagesCache.set(ev.message.mid, {
             text: ev.message.text,
             attachments: ev.message.attachments,
             timestamp: Date.now(),
-          };
+          });
           triggerSave();
         }
 
         if (ev.type === "message_reply") {
           const repliedMid = ev.message.reply_to?.mid;
           if (repliedMid) {
-            if (messagesCache[repliedMid]) {
-              ev.message.reply_to.text = messagesCache[repliedMid].text || null;
-              ev.message.reply_to.attachments = messagesCache[repliedMid].attachments || null;
+            // ✅ Map .get() is O(1)
+            const cachedMsg = messagesCache.get(repliedMid);
+            if (cachedMsg) {
+              ev.message.reply_to.text = cachedMsg.text || null;
+              ev.message.reply_to.attachments = cachedMsg.attachments || null;
             } else {
               console.log(`⚠️ Reply context not found for mid: ${repliedMid}`);
             }
@@ -125,7 +120,8 @@ module.exports.listen = (event) => {
 process.on("SIGINT", async () => {
   console.log("\n🛑 Shutting down... Saving cache...");
   try {
-    await fs.writeFile(messagesFilePath, JSON.stringify(messagesCache, null, 2));
+    const cacheObj = Object.fromEntries(messagesCache);
+    await fs.writeFile(messagesFilePath, JSON.stringify(cacheObj, null, 2));
     console.log("✅ Cache saved successfully");
   } catch (e) {
     console.error("❌ Failed to save cache:", e.message);
