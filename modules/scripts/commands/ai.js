@@ -32,7 +32,7 @@ module.exports.config = {
   author: "Sethdico",
   version: "16.7-Fix",
   category: "AI",
-  description: "Advanced Multi-AI: Vision, Web Search, and Chat.",
+  description: "Main AI.",
   adminOnly: false,
   usePrefix: false,
   cooldown: 0, 
@@ -65,7 +65,7 @@ module.exports.run = async function ({ event, args, api }) {
       return api.sendMessage("🧹 Conversation memory cleared.", senderID); 
   }
   if (isSticker && !userPrompt) return; 
-  if (imageUrl && !userPrompt) return api.sendMessage("🖼️ I see the image! What should I do?", senderID);
+  if (imageUrl && !userPrompt) return api.sendMessage("🖼️ I see the image! What should I do? reply to the image with the instruction.", senderID);
   if (!userPrompt && !imageUrl) return api.sendMessage("👋 Hi! I'm Amdusbot. I can search the web, see images, and write documents.", senderID);
 
   const youtubeRegex = /(?:youtube\.com\/watch\?v=|youtu\.be\/)([a-zA-Z0-9_-]{11})/;
