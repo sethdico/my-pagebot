@@ -3,11 +3,11 @@ const fs = require("fs");
 const path = require("path");
 const { URL } = require("url");
 
-// === CONFIGURATION (Aligned with Chipp API Reference) ===
+// === CONFIGURATION (Directly Aligned with your Model ID) ===
 const CONFIG = {
   API_URL: "https://app.chipp.ai/api/v1/chat/completions",
   API_KEY: process.env.CHIPP_API_KEY, 
-  MODEL_ID: "newapplication-10034686", // Your appNameId
+  MODEL_ID: "newapplication-10035084", // ✅ Updated to your Model ID
   TIMEOUT: 120000, 
   RATE_LIMIT: { requests: 5, windowMs: 60000 }
 };
@@ -45,7 +45,7 @@ module.exports.run = async function ({ event, args, api }) {
 
   if (!CONFIG.API_KEY) return api.sendMessage("❌ System Error: CHIPP_API_KEY is missing.", senderID);
   
-  // 1. Rate Limiting
+  // 1. Rate Limiting Check
   const now = Date.now();
   const userTs = rateLimitStore.get(senderID) || [];
   const recentTs = userTs.filter(ts => now - ts < CONFIG.RATE_LIMIT.windowMs);
@@ -53,7 +53,7 @@ module.exports.run = async function ({ event, args, api }) {
   recentTs.push(now);
   rateLimitStore.set(senderID, recentTs);
 
-  // 2. Multimedia Context
+  // 2. Multi-media Context (Vision)
   let imageUrl = "";
   const isSticker = !!event.message?.sticker_id;
   if (event.message?.attachments?.[0]?.type === "image" && !isSticker) {
@@ -62,7 +62,7 @@ module.exports.run = async function ({ event, args, api }) {
     imageUrl = event.message.reply_to.attachments[0].payload.url;
   }
 
-  // 3. Command Handling
+  // 3. User Commands
   if (userPrompt.toLowerCase() === "clear") { 
       sessions.delete(senderID); 
       return api.sendMessage("🧹 Conversation memory cleared.", senderID); 
@@ -77,30 +77,30 @@ module.exports.run = async function ({ event, args, api }) {
   if (api.sendTypingIndicator) api.sendTypingIndicator(true, senderID);
 
   try {
-    // 🧠 INTERNAL REASONING PROMPT (COVE + TREE OF THOUGHTS)
+    // 🧠 ADVANCED PROMPT (COVE + TREE OF THOUGHTS)
     const identityPrompt = `
 [SYSTEM]: You are Amdusbot, an advanced AI Assistant by Sethdico.
 [MODE]: Helpful, Concise, Intelligent.
 
-[INTERNAL PROTOCOL]:
-- Use Tree of Thoughts: Explore multiple reasoning branches for complex queries.
-- Use Chain of Verification: Fact-check your own claims before responding.
-- OUTPUT ONLY the final, verified result. DO NOT show your internal reasoning or verification steps.
+[INTERNAL REASONING]:
+- Use Tree of Thoughts: Internally explore multiple branches of reasoning for complex queries.
+- Use Chain of Verification: Verify facts and logic before presenting the final answer.
+- ONLY OUTPUT THE FINAL RESULT. Do not show your reasoning steps, verification branches, or internal self-correction.
 
 [CAPABILITIES]:
-1. VISION: Analyze images provided in [IMAGE CONTEXT].
-2. WEB SEARCH: Provide real-time info with source citations.
-3. FILES: Generate .pdf, .docx, .txt, .xlsx if requested. Output RAW URL ONLY.
+1. VISION: Analyze images provided via URL context.
+2. WEB SEARCH: Search for real-time information if needed. Cite sources clearly.
+3. FILES: Generate .pdf, .docx, .txt, .xlsx if asked. Provide the RAW DIRECT URL only.
 
 [INSTRUCTIONS]:
-- Stay under 2000 characters.
-- If asked "Who made you?", answer: "Seth Asher Salinguhay (Sethdico)".
+- Response limit: 2000 characters.
+- "Who made you?": Answer "Seth Asher Salinguhay (Sethdico)".
 `.trim();
 
-    // 4. Session Retrieval
+    // 4. Session Retrieval (Continue Session Logic)
     let sessionData = sessions.get(senderID) || { chatSessionId: null };
 
-    // 5. Build API Body (OpenAI-compatible format as per Reference)
+    // 5. Construct API Body
     const requestBody = {
       model: CONFIG.MODEL_ID,
       messages: [{ 
@@ -110,7 +110,6 @@ module.exports.run = async function ({ event, args, api }) {
       stream: false
     };
 
-    // Include chatSessionId to continue conversation if exists
     if (sessionData.chatSessionId) {
       requestBody.chatSessionId = sessionData.chatSessionId;
     }
@@ -123,21 +122,21 @@ module.exports.run = async function ({ event, args, api }) {
       timeout: CONFIG.TIMEOUT
     });
 
-    // 6. Update Session for the "Continue Session" requirement
+    // Save chatSessionId for future conversation context
     if (response.data.chatSessionId) {
       sessions.set(senderID, { chatSessionId: response.data.chatSessionId });
     }
 
     const replyContent = response.data?.choices?.[0]?.message?.content || "";
 
-    // 7. Robust File Extraction
+    // 6. File Handling & Base64 Instruction
     const fileRegex = /(https?:\/\/app\.chipp\.ai\/api\/downloads\/downloadFile[^)\s"]+|https?:\/\/(?!(?:scontent|static)\.xx\.fbcdn\.net)[^)\s"]+\.(?:pdf|docx|doc|xlsx|xls|pptx|ppt|txt|csv|zip|rar|7z|jpg|jpeg|png|gif|mp3|wav|mp4))/i;
     const match = replyContent.match(fileRegex);
 
     if (match) {
       const fileUrl = match[0].replace(/[).,]+$/, ""); 
       
-      // Send specific Base64 instruction before file
+      // ✅ Custom message as requested
       await api.sendMessage("the file is in Base64 you either decode it using me via pasting", senderID);
 
       const cacheDir = path.join(__dirname, "cache");
@@ -164,39 +163,34 @@ module.exports.run = async function ({ event, args, api }) {
 
           const stats = fs.statSync(filePath);
           if (stats.size > 24 * 1024 * 1024) {
-             await api.sendMessage(`📂 File is over 25MB. Download here: ${fileUrl}`, senderID);
+             await api.sendMessage(`📂 File is too large for Messenger. Download here: ${fileUrl}`, senderID);
           } else {
              const ext = path.extname(fileName).toLowerCase();
              const type = [".jpg", ".jpeg", ".png", ".gif", ".webp"].includes(ext) ? "image" : "file";
              await api.sendAttachment(type, filePath, senderID);
           }
       } catch (err) {
-          await api.sendMessage(`📂 I created the file but couldn't attach it. Link: ${fileUrl}`, senderID);
+          await api.sendMessage(`📂 Error attaching file. Direct link: ${fileUrl}`, senderID);
       } finally {
           setTimeout(() => { if (fs.existsSync(filePath)) fs.unlinkSync(filePath); }, 60000);
       }
     } else {
+      // Send Normal Response
       await api.sendMessage(replyContent, senderID);
     }
 
     if (api.setMessageReaction) api.setMessageReaction("✅", mid);
 
   } catch (error) {
-    // 8. Error Format Handling (Aligned with Reference Status Codes)
     const errData = error.response?.data;
     const errMessage = errData?.error || error.message;
 
-    console.error(`[Chipp Error] Status: ${error.response?.status} - ${errMessage}`);
+    console.error(`[AI Error] Status: ${error.response?.status} - ${errMessage}`);
 
-    let userFacingError = "❌ I encountered a glitch. Please ask again.";
+    let userFacingError = "❌ AI is currently unavailable. Try again later.";
     
-    if (error.response?.status === 401) {
-      userFacingError = `🔐 Authentication Failed: ${errMessage}`;
-    } else if (error.response?.status === 400) {
-      userFacingError = `⚠️ Invalid Request: ${errMessage}`;
-    } else if (error.response?.status === 404) {
-      userFacingError = "🛰️ System Error: AI Model not found.";
-    }
+    if (error.response?.status === 401) userFacingError = "❌ API Error: Invalid/Unauthorized Key.";
+    if (error.response?.status === 403) userFacingError = "❌ API Error: Chipp.ai Pro/Paid plan required.";
 
     api.sendMessage(userFacingError, senderID);
     if (api.setMessageReaction) api.setMessageReaction("❌", mid);
