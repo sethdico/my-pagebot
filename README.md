@@ -1,42 +1,37 @@
-# 🤖 AmdusPage
-The Ultimate High-Performance Multi-AI Messenger Assistant
+code
+Markdown
+# amduspage
 
-Amdusbot is a blazing-fast Facebook Messenger bot with instant command execution, admin management, and AI features.
+simple facebook messenger bot. runs on nodejs.
 
-## 🚀 Key Features
-- *Hybrid AI Brain*: Switches between Analytical and Creative modes
-- *O(1) Command Lookup*: Map-based registry for instant responses
-- *Admin Security*: Ban/Unban system and restricted commands
-- *Smart UX*: Paginated help, interactive buttons, and joke delays
+## structure
+- modules/scripts/commands: bot commands
+- page/src: api wrappers
+- index.js: main entry point
+- launcher.js: auto-restart script
+- config.json: credentials
 
-## 📂 Structure
-sethdico-my-pagebot/
-├── modules/scripts/commands/ # bot commands (.js)
-├── page/src/ # Facebook API wrappers
-├── index.js # server entry
-├── launcher.js # auto-restart
-├── webhook.js # event listener
-└── config.json # credentials
-
-## 🛠️ Setup
-1. Fill `config.json`:
+## setup
+1. fill `config.json` with your keys:
+```json
 {
   "PAGE_ACCESS_TOKEN": "...",
   "VERIFY_TOKEN": "...",
   "PREFIX": "/",
-  "ADMINS": ["YOUR_PSID"],
+  "ADMINS": ["your_uid"],
   "API_VERSION": "v21.0"
 }
+'''
 
-2. Deploy to Render:
-- Set env vars: `PAGE_ACCESS_TOKEN`, `CHIPP_API_KEY`
-- Start command: `node launcher.js`
-- Webhook: `https://your-app.onrender.com/webhook`
+deployment
+build command: npm install
+start command: node launcher.js
+env vars: set PAGE_ACCESS_TOKEN and CHIPP_API_KEY if needed
 
-## 👮 Admin Commands
-- `uid`: Get user ID
-- `ban <ID>`: Block user
-- `unban <ID>`: Restore access
-- `admin list`: View banned users
+admin
+uid: get your id
+ban <id>: block a user
+unban <id>: unblock a user
+broadcast <msg>: send announcement to active users
 
-Made by Seth Asher Salinguhay (Sethdico). Respect API limits.
+made by sethdico.
