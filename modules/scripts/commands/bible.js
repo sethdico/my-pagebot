@@ -1,35 +1,26 @@
-const axios = require("axios");
+const { http } = require("../../utils");
 
 module.exports.config = {
     name: "bible",
-    author: "Sethdico (Ported)",
-    version: "1.1",
+    author: "Sethdico",
+    version: "1.1-Fast",
     category: "Fun",
-    description: "Random Bible Verse with button support.",
+    description: "Random Verse.",
     adminOnly: false,
     usePrefix: false,
     cooldown: 5,
 };
 
-module.exports.run = async function ({ event }) {
+module.exports.run = async function ({ event, api }) {
   try {
-    const res = await axios.get("https://urangkapolka.vercel.app/api/bible");
-    const data = res.data;
-    const verse = data.verse || data.text || data.content;
-    const ref = data.reference || data.ref || "Holy Bible";
-
-    const msg = `✝️ **${ref}**\n━━━━━━━━━━━━━━━━\n${verse}`;
+    const res = await http.get("https://urangkapolka.vercel.app/api/bible");
+    const { verse, reference } = res.data;
     
-    const buttons = [
-        {
-            type: "postback",
-            title: "📖 New Verse",
-            payload: "bible"
-        }
-    ];
+    const msg = `✝️ **${reference || "Bible"}**\n━━━━━━━━━━━━━━━━\n${verse || res.data.text}`;
+    const buttons = [{ type: "postback", title: "📖 New Verse", payload: "bible" }];
 
     api.sendButton(msg, buttons, event.sender.id);
   } catch (e) {
-    api.sendMessage("❌ Could not get a verse.", event.sender.id);
+    api.sendMessage("❌ Amen... but the API is down.", event.sender.id);
   }
 };
