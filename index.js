@@ -7,7 +7,7 @@ const fs = require("fs");
 const app = express();
 const config = require("./config.json");
 
-// ✅ Global Cache Setup
+// Global Cache Setup
 global.PAGE_ACCESS_TOKEN = process.env.PAGE_ACCESS_TOKEN || config.PAGE_ACCESS_TOKEN;
 global.ADMINS = new Set(process.env.ADMINS?.split(",") || config.ADMINS || []);
 global.PREFIX = process.env.PREFIX || config.PREFIX || ".";
@@ -15,7 +15,7 @@ global.PREFIX = process.env.PREFIX || config.PREFIX || ".";
 const cacheDir = path.join(__dirname, "modules/scripts/commands/cache");
 const bannedPath = path.join(__dirname, "modules/scripts/commands/banned.json");
 
-// --- 🧹 Startup Cleaner ---
+// clear cache on start
 if (!fs.existsSync(cacheDir)) {
     fs.mkdirSync(cacheDir, { recursive: true });
 } else {
@@ -24,7 +24,7 @@ if (!fs.existsSync(cacheDir)) {
     });
 }
 
-// --- 🚫 Ban Loader ---
+// load bans
 global.BANNED_USERS = new Set();
 try {
     if (fs.existsSync(bannedPath)) {
@@ -35,7 +35,7 @@ try {
     if (!fs.existsSync(bannedPath)) fs.writeFileSync(bannedPath, "[]");
 }
 
-// --- 🚀 Recursive Command Loader ---
+// recursive command loader
 global.client = { commands: new Map(), aliases: new Map(), cooldowns: new Map() };
 
 const loadCommands = (dir) => {
@@ -72,7 +72,7 @@ app.post("/webhook", (req, res) => {
     res.sendStatus(200);
 });
 
-// ✅ Admin Crash Alerts
+// notifies admin for crash
 app.use(async (err, req, res, next) => {
     console.error(err.stack);
     if (global.api) global.ADMINS.forEach(id => global.api.sendMessage(`⚠️ crash: ${err.message}`, id).catch(() => {}));
@@ -80,4 +80,4 @@ app.use(async (err, req, res, next) => {
 });
 
 const PORT = process.env.PORT || 8080;
-app.listen(PORT, () => console.log(`✅ amdusbot active on ${PORT}`));
+app.listen(PORT, () => console.log(`amdusbot active on ${PORT}`));
