@@ -1,5 +1,4 @@
 const config = require("../config.json");
-const theme = require("../website/web.js").getTheme();
 
 function getEventType(event) {
   return new Promise((resolve) => {
@@ -14,14 +13,12 @@ function getEventType(event) {
 }
 
 function log(event) {
-  // ✅ Fixed: Check both ADMIN and ADMINS
-  const adminList = config.ADMINS || config.ADMIN || [];
-  let sender = adminList.includes(event.sender?.id) ? "ADMIN" : "USER";
-  if (event.message?.is_echo) sender = "BOT";
-  
+  const adminList = config.ADMINS || [];
+  const sender = adminList.includes(event.sender?.id) ? "ADMIN" : "USER";
   const maskedId = event.sender?.id ? `...${event.sender.id.slice(-4)}` : "unknown";
   
-  console.log(`${theme.gradient.multiline(sender)} (${maskedId}): Event Received`);
+  // Clean console log without extra dependencies
+  console.log(`[ ${sender} ] (${maskedId}): Event Received`);
 }
 
 module.exports = { log, getEventType };
