@@ -1,12 +1,9 @@
 const axios = require("axios");
-const fs = require("fs");
-const path = require("path");
-const QUEUE_FILE = path.join(__dirname, "broadcast_queue.json");
 
 module.exports.config = {
     name: "broadcast",
     author: "Sethdico",
-    version: "3.2",
+    version: "3.3",
     category: "Admin",
     description: "send global announcement.",
     adminOnly: true,
@@ -14,12 +11,12 @@ module.exports.config = {
     cooldown: 0,
 };
 
-module.exports.run = async function ({ event, args, api }) {
+module.exports.run = async function ({ event, args, api, reply }) {
     const senderID = event.sender.id;
-    if (!global.ADMINS.has(senderID)) return; 
+    if (!global.ADMINS.has(senderID)) return reply("⛔ admin only.");
 
     const msg = args.join(" ");
-    if (!msg) return api.sendMessage("📢 usage: broadcast <message>", senderID);
+    if (!msg) return reply("📢 usage: broadcast <message>");
 
     try {
         const res = await axios.get(`https://graph.facebook.com/v21.0/me/conversations?fields=participants&limit=100&access_token=${global.PAGE_ACCESS_TOKEN}`);
@@ -29,8 +26,8 @@ module.exports.run = async function ({ event, args, api }) {
             api.sendMessage(`📢 **announcement**\n\n${msg}`, id).catch(() => {});
         });
 
-        api.sendMessage(`✅ sent to ${users.length} users.`, senderID);
+        reply(`✅ sent to ${users.length} users.`);
     } catch (e) {
-        api.sendMessage("❌ failed.", senderID);
+        reply("❌ failed.");
     }
 };
