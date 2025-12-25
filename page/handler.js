@@ -28,9 +28,8 @@ module.exports = async function (event) {
   let command = global.client.commands.get(cmdName) || global.client.commands.get(global.client.aliases.get(cmdName));
 
   if (command) {
-      // Permission Check
-      const adminList = process.env.ADMINS?.split(",") || config.ADMINS || [];
-      if (command.config.adminOnly && !adminList.includes(senderID)) {
+      // ✅ OPTIMIZED: Permission Check using the Global Set
+      if (command.config.adminOnly && !global.ADMINS.has(senderID)) {
           return reply("⛔ Admin only.");
       }
 
@@ -42,6 +41,7 @@ module.exports = async function (event) {
           reply("❌ Command failed.");
       }
   } else {
+      // AI Fallback (If no prefix used)
       if (!messageText.startsWith(config.PREFIX)) {
           const aiCommand = global.client.commands.get("ai");
           if (aiCommand) await aiCommand.run({ event, args: messageText.split(" "), api, reply });
