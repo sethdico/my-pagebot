@@ -5,7 +5,7 @@ module.exports = async function (event) {
   const api = {};
   const srcPath = path.join(__dirname, "src");
 
-  // ✅ Automatically loads all files in page/src/
+  // Automatically loads page/src
   fs.readdirSync(srcPath).filter(f => f.endsWith(".js")).forEach(file => {
     try {
       const scriptName = path.parse(file).name;
