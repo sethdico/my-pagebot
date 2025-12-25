@@ -2,7 +2,7 @@ const axios = require("axios");
 
 module.exports.config = {
     name: "wolfram",
-    aliases: ["wa", "calc", "math"],
+    aliases: ["wa", "calc"],
     author: "Sethdico",
     version: "2.0-Smart",
     category: "Utility",
@@ -14,11 +14,11 @@ module.exports.config = {
 
 module.exports.run = async function ({ event, args, api }) {
     const input = args.join(" ");
-    if (!input) return api.sendMessage("🧮 Usage: wolfram <query>", event.sender.id);
+    if (!input) return api.sendMessage("🧮 Usage: wolfram <query>\nEx: wolfram integrate x^2\nEx: wolfram distance to mars", event.sender.id);
 
     if (api.sendTypingIndicator) api.sendTypingIndicator(true, event.sender.id).catch(()=>{});
 
-    // ✅ SECURED: Pulled from Render Environment
+    // ✅ FIXED: Pulled from Environment
     const APP_ID = process.env.WOLFRAM_APP_ID;
 
     try {
@@ -61,14 +61,25 @@ module.exports.run = async function ({ event, args, api }) {
 
         const cleanInput = inputInterp.length > 100 ? inputInterp.substring(0, 100) + "..." : inputInterp;
         const cleanResult = resultText || "Check the image below.";
+
         const msg = `🧮 **Wolfram Alpha**\n━━━━━━━━━━━━━━━━\n📥 **Input:** ${cleanInput}\n\n📤 **Result:** ${extraInfo}\n${cleanResult}`;
         const webUrl = `https://www.wolframalpha.com/input/?i=${encodeURIComponent(input)}`;
-        const buttons = [{ type: "web_url", url: webUrl, title: "🌐 Full Details" }];
+        const buttons = [
+            {
+                type: "web_url",
+                url: webUrl,
+                title: "🌐 Full Details"
+            }
+        ];
 
         await api.sendButton(msg, buttons, event.sender.id);
-        if (resultImage) await api.sendAttachment("image", resultImage, event.sender.id);
+
+        if (resultImage) {
+            await api.sendAttachment("image", resultImage, event.sender.id);
+        }
 
     } catch (e) {
+        console.error("Wolfram Error:", e.message);
         api.sendMessage("❌ Connection timed out or API limit reached.", event.sender.id);
     } finally {
         if (api.sendTypingIndicator) api.sendTypingIndicator(false, event.sender.id).catch(()=>{});
