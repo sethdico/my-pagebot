@@ -1,37 +1,11 @@
-const axios = require("axios");
-
-module.exports.config = {
-    name: "webpilot",
-    author: "Sethdico (Ported)",
-    version: "1.0",
-    category: "AI", // Changed from Utility to AI
-    description: "Web Search AI",
-    adminOnly: false,
-    usePrefix: false,
-    cooldown: 10,
-};
-
-module.exports.run = async function ({ event, args }) {
-    const query = args.join(" ");
-    if (!query) return api.sendMessage("🌐 Usage: webpilot <search query>", event.sender.id);
-
-    api.sendTypingIndicator(true, event.sender.id);
-    api.sendMessage(`🌐 Searching: "${query}"...`, event.sender.id);
-
+const { http } = require("../../utils");
+module.exports.config = { name: "webpilot", category: "AI", cooldown: 5 };
+module.exports.run = async ({ event, args, api }) => {
+    if (!args[0]) return api.sendMessage("🌐 Usage: webpilot <search>", event.sender.id);
     try {
-        const res = await axios.get("https://betadash-api-swordslush-production.up.railway.app/webpilot", {
-            params: { search: query }
+        const res = await http.get("https://betadash-api-swordslush-production.up.railway.app/webpilot", { 
+            params: { search: args.join(" ") } 
         });
-
-        const answer = res.data.response;
-        if (answer) {
-            api.sendMessage(`🌐 **WebPilot**\n━━━━━━━━━━━━━━━━\n${answer}`, event.sender.id);
-        } else {
-            api.sendMessage("❌ No results found.", event.sender.id);
-        }
-    } catch (e) {
-        api.sendMessage("❌ WebPilot is down.", event.sender.id);
-    } finally {
-        api.sendTypingIndicator(false, event.sender.id);
-    }
+        api.sendMessage(`🌐 **WebPilot**\n${res.data.response}`, event.sender.id);
+    } catch (e) { api.sendMessage("❌ Webpilot error.", event.sender.id); }
 };
