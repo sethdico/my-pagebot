@@ -1,14 +1,14 @@
 const axios = require("axios");
 
-// RAM storage for sessions: { email, id, createdAt, lastMessages }
+// RAM storage for sessions
 const sessions = new Map();
 
 module.exports.config = {
     name: "tempmail",
     author: "Sethdico",
-    version: "3.0",
+    version: "3.5",
     category: "Utility",
-    description: "temp mail via boomlify api.",
+    description: "Professional disposable email service via Boomlify.",
     adminOnly: false,
     usePrefix: false,
     cooldown: 5,
@@ -16,32 +16,39 @@ module.exports.config = {
 
 module.exports.run = async function ({ event, args, reply, api }) {
     const senderID = event.sender.id;
-    const action = args[0]?.toLowerCase();
     const token = process.env.APY_TOKEN;
 
-    if (!token) return reply("❌ APY_TOKEN missing.");
+    if (!token) return reply("❌ APY_TOKEN missing in environment.");
+
+    // This part fixes the AI Fallback issue by recognizing the Quick Reply text
+    const rawInput = (args.join(" ") || "").toLowerCase();
+    let action = args[0]?.toLowerCase();
+
+    if (rawInput.includes("generate email") || rawInput.includes("gen")) action = "gen";
+    if (rawInput.includes("check inbox") || rawInput.includes("refresh")) action = "inbox";
+    if (rawInput.includes("clear session")) action = "clear";
+    if (rawInput.startsWith("read")) action = "read";
 
     const session = sessions.get(senderID);
 
-    // --- 1. SMART CONTENT READER ---
+    // --- 1. ACTION: READ ---
     if (action === "read") {
-        const index = parseInt(args[1]) - 1;
+        const index = parseInt(args[1] || args[0].split(" ")[1]) - 1;
         if (!session?.lastMessages?.[index]) return reply("⚠️ Message not found. Check inbox first.");
 
         const mail = session.lastMessages[index];
         const body = mail.text || mail.html?.replace(/<[^>]*>?/gm, '') || "No content.";
         
-        const readMsg = `📖 **MESSAGE**\n━━━━━━━━━━━━━━━━\n👤 From: ${mail.from?.address || mail.from}\n📝 Sub: ${mail.subject}\n━━━━━━━━━━━━━━━━\n\n${body.substring(0, 1800)}`;
+        const readMsg = `📖 **MESSAGE CONTENT**\n━━━━━━━━━━━━━━━━\n👤 **From:** ${mail.from?.address || mail.from}\n📝 **Subject:** ${mail.subject}\n━━━━━━━━━━━━━━━━\n\n${body.substring(0, 1800)}`;
         
-        return api.sendQuickReply(readMsg, ["Back to Inbox", "Clear Session"], senderID);
+        return api.sendQuickReply(readMsg, ["Check Inbox", "Clear Session"], senderID);
     }
 
-    // --- 2. SMART INBOX FETCH ---
-    if (action === "inbox" || action === "check" || action === "back") {
-        if (!session) return reply("⚠️ You don't have an active email. Tap 'Generate' below.");
+    // --- 2. ACTION: INBOX (Resilient Logic) ---
+    if (action === "inbox") {
+        if (!session) return reply("⚠️ No active session found. Generate one first.");
 
         try {
-            // Using address-based lookup (Standard ApyHub/Boomlify)
             const res = await axios.get(`https://api.apyhub.com/boomlify/emails/inbox`, {
                 headers: { 'apy-token': token },
                 params: { address: session.email }
@@ -50,26 +57,27 @@ module.exports.run = async function ({ event, args, reply, api }) {
             const messages = res.data.items || res.data.data || (Array.isArray(res.data) ? res.data : []);
             
             if (messages.length === 0) {
-                return api.sendQuickReply(`📭 Inbox is empty for:\n${session.email}\n\nNo messages received yet.`, ["Refresh Inbox", "Clear Session"], senderID);
+                return api.sendQuickReply(`📭 **Inbox is empty**\nAddress: ${session.email}\n\nWaiting for incoming mail...`, ["Check Inbox", "Clear Session"], senderID);
             }
 
             session.lastMessages = messages;
             sessions.set(senderID, session);
 
-            let list = `📬 **Inbox for: ${session.email}**\n━━━━━━━━━━━━━━━━\n`;
-            messages.slice(0, 5).forEach((m, i) => list += `[${i + 1}] From: ${m.from?.address || m.from}\nSub: ${m.subject}\n\n`);
-            list += `━━━━━━━━━━━━━━━━\n💡 Reply "tempmail read 1" to open.`;
+            let list = `📬 **INBOX: ${session.email}**\n━━━━━━━━━━━━━━━━\n`;
+            messages.slice(0, 5).forEach((m, i) => {
+                list += `[${i + 1}] From: ${m.from?.address || m.from}\nSub: ${m.subject}\n\n`;
+            });
+            list += `━━━━━━━━━━━━━━━━\n💡 To read, type: tempmail read [number]`;
             
-            return api.sendQuickReply(list, ["Refresh Inbox", "Clear Session"], senderID);
+            return api.sendQuickReply(list, ["Check Inbox", "Clear Session"], senderID);
         } catch (e) { 
-            return reply("❌ Inbox currently unavailable."); 
+            console.error(e.response?.data);
+            return reply("❌ API Error: Failed to fetch inbox."); 
         }
     }
 
-    // --- 3. OPTIMIZED GENERATOR ---
-    if (action === "gen" || action === "generate") {
-        if (session) return api.sendQuickReply(`⚠️ You already have an active mail:\n${session.email}\n\nClear it first to make a new one.`, ["Check Inbox", "Clear Session"], senderID);
-
+    // --- 3. ACTION: GENERATE ---
+    if (action === "gen") {
         try {
             const res = await axios.post('https://api.apyhub.com/boomlify/emails/create', {}, {
                 headers: { 'apy-token': token },
@@ -81,37 +89,39 @@ module.exports.run = async function ({ event, args, reply, api }) {
                 sessions.set(senderID, { 
                     email: data.address, 
                     id: data.id, 
-                    createdAt: Date.now(),
                     lastMessages: [] 
                 });
 
-                const mainMsg = `📧 **Temp Mail Ready**\n━━━━━━━━━━━━━━━━\nAddress: ${data.address}\nExpires: In 1 hour\n━━━━━━━━━━━━━━━━`;
+                const mainMsg = `📧 **DISPOSABLE EMAIL CREATED**\n━━━━━━━━━━━━━━━━\nAddress: ${data.address}\nStatus: Active (1 Hour)\n━━━━━━━━━━━━━━━━\nUse the address below to sign up.`;
                 
                 await api.sendQuickReply(mainMsg, ["Check Inbox", "Clear Session"], senderID);
-
-                // Anti-spam delay for the copy-paste address
                 setTimeout(() => { reply(data.address); }, 1500);
                 return;
             }
-        } catch (e) { return reply("❌ Failed to generate email."); }
+        } catch (e) { return reply("❌ Failed to generate email. Check API credits."); }
     }
 
-    // --- 4. CLEAR SESSION ---
-    if (action === "clear" || action === "delete") {
+    // --- 4. ACTION: CLEAR ---
+    if (action === "clear") {
         sessions.delete(senderID);
-        return reply("🧹 Your session has been wiped. Your data is gone.");
+        return reply("🧹 Session cleared successfully.");
     }
 
-    // --- 5. THE "WISE" SMART MENU ---
-    // This triggers if the user just types "tempmail"
+    // --- 5. PROFESSIONAL HELP MENU ---
+    const helpHeader = 
+        `📧 **TEMP-MAIL UTILITY**\n` +
+        `━━━━━━━━━━━━━━━━\n` +
+        `Generate temporary, disposable email addresses to prevent spam and protect your privacy.\n\n` +
+        `🔹 **Commands:**\n` +
+        `• tempmail gen - Create new mail\n` +
+        `• tempmail inbox - Check messages\n` +
+        `• tempmail read [n] - Read a specific mail\n` +
+        `• tempmail clear - Wipe current session\n` +
+        `━━━━━━━━━━━━━━━━`;
+
     if (session) {
-        const minutesLeft = Math.max(0, 60 - Math.floor((Date.now() - session.createdAt) / 60000));
-        const statusMsg = `📧 **Active Session**\n━━━━━━━━━━━━━━━━\nEmail: ${session.email}\nStatus: Active\nRemaining: ~${minutesLeft} mins\n━━━━━━━━━━━━━━━━\nWhat would you like to do?`;
-        
-        return api.sendQuickReply(statusMsg, ["Check Inbox", "Clear Session"], senderID);
+        return api.sendQuickReply(`${helpHeader}\n\n✅ **Current Active Mail:**\n${session.email}`, ["Check Inbox", "Clear Session"], senderID);
     }
 
-    // If no session and no action, show standard welcome
-    const helpText = `📧 **TempMail Manager**\n\njust added tempmail command. works by tempmail gen|inbox|clear. skip the spam signups. 📧✨`;
-    return api.sendQuickReply(helpText, ["Generate Email"], senderID);
+    return api.sendQuickReply(helpHeader, ["Generate Email"], senderID);
 };
