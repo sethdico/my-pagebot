@@ -1,19 +1,33 @@
 const fs = require("fs");
 const path = require("path");
 
-module.exports = async function (event) {
-  const api = {};
-  const srcPath = path.join(__dirname, "src");
+const tools = {}; 
+const srcPath = path.join(__dirname, "src");
 
-  // Automatically loads page/src
-  fs.readdirSync(srcPath).filter(f => f.endsWith(".js")).forEach(file => {
-    try {
-      const scriptName = path.parse(file).name;
-      const loaded = require(`./src/${file}`);
-      if (typeof loaded === "function") api[scriptName] = loaded(event);
-    } catch (e) { console.error(`❌ API Load Fail: ${file}`); }
-  });
-  
-  global.api = api;
-  require("./handler.js")(event);
+// load all the api scripts just once when bot starts
+// this saves memory and cpu
+try {
+    fs.readdirSync(srcPath).filter(f => f.endsWith(".js")).forEach(file => {
+        const name = path.parse(file).name;
+        tools[name] = require(`./src/${file}`);
+    });
+    console.log(`Loaded ${Object.keys(tools).length} API tools`);
+} catch (e) {
+    console.log("❌ Error loading API tools:", e);
+}
+
+module.exports = async function (event) {
+    // create a temp api object for this specific event
+    const api = {};
+
+    // attach our pre-loaded tools
+    for (const key in tools) {
+        // pass 'event' so the tool knows who to reply to
+        api[key] = tools[key](event);
+    }
+
+    global.api = api; // update global ref just in case
+    
+    // send it to the handler
+    require("./handler.js")(event);
 };
