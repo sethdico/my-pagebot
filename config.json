@@ -14,11 +14,5 @@
   "BOTNAME": "Amdusbot",
   "clearData": false,
   "markAsSeen": true,
-  "selfListen": false,
-  "THEME_SETUP": {
-    "THEME": "Fiery",
-    "ADMIN": "Sethdico",
-    "TITLE": "AMDUSBOT",
-    "HTML": ["#bc6107", "#fe8916", "#ff952a"]
-  }
+  "selfListen": false
 }
