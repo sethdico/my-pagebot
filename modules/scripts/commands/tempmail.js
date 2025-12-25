@@ -1,12 +1,12 @@
 const axios = require("axios");
 
-// ram storage for sessions
+// RAM storage for sessions: { email, expiresAt, lastMessages }
 const sessions = new Map();
 
 module.exports.config = {
     name: "tempmail",
     author: "Sethdico",
-    version: "1.2",
+    version: "2.1",
     category: "Utility",
     description: "temp mail via boomlify api.",
     adminOnly: false,
@@ -19,71 +19,107 @@ module.exports.run = async function ({ event, args, reply, api }) {
     const action = args[0]?.toLowerCase();
     const token = process.env.APY_TOKEN;
 
-    if (!token || token === "SECURED_ON_RENDER") {
-        return reply("❌ apy_token missing on render environment.");
+    if (!token) return reply("❌ APY_TOKEN missing on Render environment.");
+
+    // --- 1. READ MESSAGE CONTENT ---
+    if (action === "read") {
+        const session = sessions.get(senderID);
+        const index = parseInt(args[1]) - 1;
+        
+        if (!session || !session.lastMessages) return reply("⚠️ Please check your inbox first.");
+        const mail = session.lastMessages[index];
+        if (!mail) return reply("❌ Invalid message number.");
+
+        // Clean HTML if text isn't available
+        const body = mail.text || mail.html?.replace(/<[^>]*>?/gm, '') || "No content found.";
+        
+        const readMsg = `📖 **MESSAGE CONTENT**\n━━━━━━━━━━━━━━━━\n👤 **From:** ${mail.from?.address || mail.from}\n📝 **Subject:** ${mail.subject}\n━━━━━━━━━━━━━━━━\n\n${body.substring(0, 1800)}`;
+        
+        return api.sendButton(readMsg, [
+            { type: "postback", title: "📥 Back to Inbox", payload: "tempmail inbox" }
+        ], senderID);
     }
 
-    // 1. generate mail
-    if (action === "gen" || !action) {
+    // --- 2. CHECK INBOX ---
+    if (action === "inbox" || action === "check") {
+        const session = sessions.get(senderID);
+        if (!session) return reply("⚠️ No active email. Use 'tempmail gen' first.");
+
         if (api.sendTypingIndicator) api.sendTypingIndicator(true, senderID);
         try {
-            // using the exact boomlify create endpoint from your docs
+            const res = await axios.get(`https://api.apyhub.com/boomlify/emails/inbox`, {
+                headers: { 'apy-token': token },
+                params: { address: session.email }
+            });
+
+            const messages = res.data.items || res.data || [];
+            if (messages.length === 0) return reply("📭 Inbox is empty. Try again in a few moments.");
+
+            // Cache messages in RAM so user can read them by index
+            session.lastMessages = messages;
+            sessions.set(senderID, session);
+
+            let list = `📬 **Inbox for: ${session.email}**\n━━━━━━━━━━━━━━━━\n`;
+            messages.slice(0, 5).forEach((m, i) => {
+                list += `[${i + 1}] From: ${m.from?.address || m.from}\nSub: ${m.subject}\n\n`;
+            });
+            list += `━━━━━━━━━━━━━━━━\n💡 Type "tempmail read 1" to see full text.`;
+            
+            return api.sendButton(list, [
+                { type: "postback", title: "🔄 Refresh", payload: "tempmail inbox" },
+                { type: "postback", title: "🧹 Clear", payload: "tempmail clear" }
+            ], senderID);
+        } catch (e) {
+            return reply("❌ Failed to fetch inbox.");
+        } finally {
+            if (api.sendTypingIndicator) api.sendTypingIndicator(false, senderID);
+        }
+    }
+
+    // --- 3. GENERATE EMAIL ---
+    if (action === "gen") {
+        if (api.sendTypingIndicator) api.sendTypingIndicator(true, senderID);
+        try {
             const res = await axios.post('https://api.apyhub.com/boomlify/emails/create', {}, {
                 headers: { 'apy-token': token },
-                params: { time: "1hour" } // set to 1 hour so it doesn't expire too fast
+                params: { time: "1hour" } 
             });
 
             if (res.data.success) {
-                const email = res.data.email.address;
-                sessions.set(senderID, email);
-                return reply(`📧 **temp mail**\n━━━━━━━━━━━━━━━━\naddress: ${email}\nexpires: in 1 hour\n\n💡 type "tempmail inbox" to check.`);
-            } else {
-                throw new Error("API failed");
+                const data = res.data.email;
+                sessions.set(senderID, { 
+                    email: data.address, 
+                    expiresAt: data.expires_at,
+                    lastMessages: [] 
+                });
+
+                await reply(`📧 **Temporary Email Created**\n━━━━━━━━━━━━━━━━\nAddress: ${data.address}\nExpires: In 1 hour\n━━━━━━━━━━━━━━━━`);
+                
+                // Send the address alone so user can long-press to copy easily
+                await reply(data.address); 
+
+                return api.sendButton("Manage your session:", [
+                    { type: "postback", title: "📥 Check Inbox", payload: "tempmail inbox" },
+                    { type: "postback", title: "🧹 Clear Session", payload: "tempmail clear" }
+                ], senderID);
             }
         } catch (e) {
-            console.error(e.response?.data || e.message);
-            return reply("❌ failed to gen mail. check token.");
+            return reply("❌ Generation failed. Check your API quota.");
         } finally {
             if (api.sendTypingIndicator) api.sendTypingIndicator(false, senderID);
         }
     }
 
-    // 2. check inbox
-    if (action === "inbox" || action === "check") {
-        const email = sessions.get(senderID);
-        if (!email) return reply("⚠️ gen a mail first. type 'tempmail gen'.");
-
-        if (api.sendTypingIndicator) api.sendTypingIndicator(true, senderID);
-        try {
-            // boomlify inbox endpoint
-            const res = await axios.get(`https://api.apyhub.com/boomlify/emails/inbox`, {
-                headers: { 'apy-token': token },
-                params: { address: email }
-            });
-
-            // adjusted based on standard boomlify response keys
-            const messages = res.data.items || res.data.data || [];
-            
-            if (messages.length === 0) return reply("📭 inbox is empty.");
-
-            let msg = `📬 **inbox: ${email}**\n━━━━━━━━━━━━━━━━\n`;
-            messages.slice(0, 5).forEach((m, i) => {
-                msg += `${i + 1}. from: ${m.from?.address || m.from}\nsub: ${m.subject}\n\n`;
-            });
-            
-            return reply(msg);
-        } catch (e) {
-            return reply("❌ failed to fetch inbox.");
-        } finally {
-            if (api.sendTypingIndicator) api.sendTypingIndicator(false, senderID);
-        }
-    }
-
-    // 3. clear
+    // --- 4. CLEAR SESSION ---
     if (action === "clear") {
         sessions.delete(senderID);
-        return reply("🧹 session cleared.");
+        return reply("🧹 Your temp mail session has been cleared.");
     }
 
-    reply("❓ usage: tempmail <gen|inbox|clear>");
+    // --- DEFAULT: MAIN MENU ---
+    const helpText = `📧 **TempMail Manager**\n\nGenerate disposable emails to protect your privacy and avoid spam.`;
+    return api.sendButton(helpText, [
+        { type: "postback", title: "✨ Generate Email", payload: "tempmail gen" },
+        { type: "postback", title: "📥 Check Inbox", payload: "tempmail inbox" }
+    ], senderID);
 };
