@@ -1,4 +1,4 @@
-// store spam counts in memory
+// keep track of spammers in memory
 const spamMap = new Map();
 
 module.exports = async function (event) {
@@ -67,10 +67,10 @@ module.exports = async function (event) {
         const ai = global.client.commands.get("ai");
         if (ai) {
             try {
-                // we reconstruct the args to be the full text for AI
+                // reconstruct the text for AI
                 await ai.run({ event, args: body.split(" "), api, reply });
             } catch (e) {
-                // silent fail for AI
+                // silent fail
             }
         }
     }
