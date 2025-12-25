@@ -113,7 +113,6 @@ module.exports.run = async function ({ event, args, api }) {
 
     const replyContent = response.data?.choices?.[0]?.message?.content || "";
 
-    // 🛡️ UPDATED REGEX: Now catches both chipp.ai and storage.googleapis.com links
     const fileRegex = /(https?:\/\/[^\s)]+\.(?:pdf|docx|doc|xlsx|xls|pptx|ppt|txt|csv|zip|rar|7z|jpg|jpeg|png|gif|webp|mp3|wav|mp4)(?:\?[^\s)]*)?)/i;
     const match = replyContent.match(fileRegex);
 
@@ -122,30 +121,23 @@ module.exports.run = async function ({ event, args, api }) {
       const cacheDir = path.join(__dirname, "cache");
       if (!fs.existsSync(cacheDir)) fs.mkdirSync(cacheDir, { recursive: true });
 
-      // 🛠️ IMPROVED FILENAME DETECTION
       let fileName = "";
       try {
           const urlObj = new URL(fileUrl);
-          // 1. Try Chipp's fileName param
           fileName = urlObj.searchParams.get("fileName");
-          // 2. Fallback to path basename (important for Google Storage links)
           if (!fileName) {
               fileName = path.basename(urlObj.pathname);
           }
-          // 3. Last fallback
           if (!fileName || fileName === "/") fileName = `file_${Date.now()}.bin`;
-          
           fileName = decodeURIComponent(fileName).replace(/[^a-zA-Z0-9._-]/g, "_"); 
       } catch (e) { fileName = `file_${Date.now()}.bin`; }
 
       const ext = path.extname(fileName).toLowerCase();
       const isImage = [".jpg", ".jpeg", ".png", ".gif", ".webp"].includes(ext);
 
-      // Step 2: Handle Text Message
       const textPart = replyContent.replace(match[0], "").trim();
       if (textPart) await api.sendMessage(textPart, senderID);
 
-      // ✅ STRICT CHECK: Instruction ONLY for non-images
       if (!isImage) {
         await api.sendMessage("the file is in Base64 you either decode it using me via pasting", senderID);
       }
