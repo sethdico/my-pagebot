@@ -18,7 +18,7 @@ module.exports.run = async function ({ event, args, api }) {
 
     if (api.sendTypingIndicator) api.sendTypingIndicator(true, event.sender.id).catch(()=>{});
 
-    // ✅ SECURED: Pulled from Render Environment
+    // ✅ FIXED: Pulled from Environment
     const API_KEY = process.env.GOOGLE_API_KEY; 
     const CX = process.env.GOOGLE_CX; 
 
@@ -41,13 +41,20 @@ module.exports.run = async function ({ event, args, api }) {
                 title: cleanTitle,
                 subtitle: shortSnippet,
                 image_url: screenshotUrl,
-                buttons: [{ type: "web_url", url: item.link, title: "🌍 Visit Site" }]
+                buttons: [
+                    {
+                        type: "web_url",
+                        url: item.link,
+                        title: "🌍 Visit Site"
+                    }
+                ]
             };
         });
 
         await api.sendCarousel(elements, event.sender.id);
 
     } catch (e) {
+        console.error("GOOGLE ERROR:", e.response?.data || e.message);
         api.sendMessage("❌ Google Search failed.", event.sender.id);
     } finally {
         if (api.sendTypingIndicator) api.sendTypingIndicator(false, event.sender.id).catch(()=>{});
