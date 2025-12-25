@@ -1,4 +1,4 @@
-require('dotenv').config(); // ✅ CRITICAL: Loads your Render Environment Variables
+require('dotenv').config(); // ✅ CRITICAL: MUST BE ON LINE 1
 const web = require("./website/web.js");
 const webhook = require("./webhook.js");
 const parser = require("body-parser");
@@ -10,7 +10,6 @@ const app = express();
 const cacheDir = path.join(__dirname, "modules/scripts/commands/cache");
 const bannedPath = path.join(__dirname, "modules/scripts/commands/banned.json");
 
-// --- 🧹 STARTUP CLEANER ---
 if (!fs.existsSync(cacheDir)) {
     fs.mkdirSync(cacheDir, { recursive: true });
 } else {
@@ -21,7 +20,6 @@ if (!fs.existsSync(cacheDir)) {
     console.log("🧹 SYSTEM: Cache cleared on startup.");
 }
 
-// --- 🚫 LOAD BANNED USERS ---
 global.BANNED_USERS = new Set();
 try {
     if (fs.existsSync(bannedPath)) {
@@ -37,7 +35,6 @@ try {
     if (!fs.existsSync(bannedPath)) fs.writeFileSync(bannedPath, "[]");
 }
 
-// --- 🚀 GLOBAL COMMAND LOADER ---
 global.client = {
     commands: new Map(),
     aliases: new Map(),
@@ -66,7 +63,6 @@ for (const file of commandFiles) {
 }
 console.log(`✅ Commands loaded successfully!`);
 
-// --- 🛡️ MIDDLEWARE ---
 app.use(parser.json({ limit: '10mb' }));
 app.use(express.static("website"));
 
@@ -78,7 +74,6 @@ app.use((req, res, next) => {
   }
 });
 
-// --- ROUTES ---
 app.get("/", (req, res) => { web.html(res); });
 app.get("/webhook", (req, res) => { web.verify(req, res); });
 app.post("/webhook", (req, res) => {
@@ -86,16 +81,13 @@ app.post("/webhook", (req, res) => {
     res.sendStatus(200);
 });
 
-// --- 🚨 GLOBAL ERROR HANDLER ---
 app.use((err, req, res, next) => {
   console.error("🔥 Critical Server Error:", err.stack);
   res.status(500).send("Internal Server Error");
-  
   const errorLog = `[${new Date().toISOString()}] ${err.stack}\n`;
   fs.appendFile(path.join(__dirname, "error.log"), errorLog, () => {});
 });
 
-// ✅ Graceful shutdown
 process.on('SIGTERM', () => {
   console.log('SIGTERM received, shutting down gracefully...');
   process.exit(0);
