@@ -1,9 +1,9 @@
-const axios = require("axios");
+const { http } = require("../../utils");
 
 module.exports.config = {
     name: "google",
     author: "Sethdico",
-    version: "2.1",
+    version: "2.1-Fast",
     category: "Utility",
     description: "search google with carousel results.",
     adminOnly: false,
@@ -22,7 +22,8 @@ module.exports.run = async function ({ event, args, api }) {
 
     try {
         const targetUrl = `https://www.googleapis.com/customsearch/v1?key=${API_KEY}&cx=${CX}&q=${encodeURIComponent(query)}`;
-        const res = await axios.get(targetUrl);
+        // use http.get
+        const res = await http.get(targetUrl);
         const items = res.data.items;
 
         if (!items || items.length === 0) {
@@ -30,7 +31,6 @@ module.exports.run = async function ({ event, args, api }) {
         }
 
         const elements = items.slice(0, 5).map(item => {
-            // ✅ FIXED: Truncate title/subtitle to 80 chars (FB Carousel Limit)
             const cleanTitle = item.title.length > 80 ? item.title.substring(0, 77) + "..." : item.title;
             const snippet = (item.snippet || "no description").replace(/\n/g, " ");
             const cleanSubtitle = snippet.length > 80 ? snippet.substring(0, 77) + "..." : snippet;
