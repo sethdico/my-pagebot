@@ -1,9 +1,9 @@
-const axios = require("axios");
+const { http } = require("../../utils");
 
 module.exports.config = {
     name: "wiki",
     author: "Sethdico",
-    version: "3.0-ULTRA",
+    version: "3.0-ULTRA-Fast",
     category: "Utility",
     description: "Wiki: Search, PDF, On This Day, and Multi-Language.",
     adminOnly: false,
@@ -11,12 +11,11 @@ module.exports.config = {
     cooldown: 5,
 };
 
-// ✅ FIXED: Pulled from Environment
 const ACCESS_TOKEN = process.env.WIKI_ACCESS_TOKEN;
 
+// we use the fast client headers + auth
 const HEADERS = {
-    'Authorization': `Bearer ${ACCESS_TOKEN}`,
-    'User-Agent': 'Amdusbot/3.0 (WikiCommand)'
+    'Authorization': `Bearer ${ACCESS_TOKEN}`
 };
 
 module.exports.run = async function ({ event, args, api }) {
@@ -60,7 +59,8 @@ module.exports.run = async function ({ event, args, api }) {
 async function handleSearch(query, lang, event, api) {
     try {
         const url = `https://${lang}.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(query)}`;
-        const response = await axios.get(url, { headers: HEADERS });
+        // fast get
+        const response = await http.get(url, { headers: HEADERS });
         const data = response.data;
 
         if (data.type === "disambiguation") {
@@ -70,7 +70,7 @@ async function handleSearch(query, lang, event, api) {
         let relatedText = "";
         try {
             const relatedUrl = `https://${lang}.wikipedia.org/api/rest_v1/page/related/${encodeURIComponent(query)}`;
-            const relatedRes = await axios.get(relatedUrl, { headers: HEADERS });
+            const relatedRes = await http.get(relatedUrl, { headers: HEADERS });
             const related = relatedRes.data.pages.slice(0, 3).map(p => p.title).join(", ");
             if (related) relatedText = `\n🔗 **Related:** ${related}`;
         } catch (e) {} 
@@ -91,7 +91,8 @@ async function handleOnThisDay(event, api) {
         const mm = String(date.getMonth() + 1).padStart(2, '0');
         const dd = String(date.getDate()).padStart(2, '0');
         const url = `https://en.wikipedia.org/api/rest_v1/feed/onthisday/selected/${mm}/${dd}`;
-        const res = await axios.get(url, { headers: HEADERS });
+        
+        const res = await http.get(url, { headers: HEADERS });
         const randomEvents = res.data.selected.sort(() => 0.5 - Math.random()).slice(0, 3);
         let msg = `📅 **ON THIS DAY (${mm}/${dd})**\n━━━━━━━━━━━━━━━━\n`;
         randomEvents.forEach(e => {
@@ -115,7 +116,7 @@ async function handlePDF(query, event, api) {
 async function handleRandom(event, lang, api) {
     try {
         const url = `https://${lang}.wikipedia.org/api/rest_v1/page/random/summary`;
-        const res = await axios.get(url, { headers: HEADERS });
+        const res = await http.get(url, { headers: HEADERS });
         sendResult(res.data, "", lang, event, api);
     } catch (e) {
         api.sendMessage("❌ Random fetch failed.", event.sender.id);
