@@ -1,14 +1,12 @@
-const axios = require("axios");
-
-// === MEMORY STORAGE ===
-const copilotHistory = new Map();
+const { http } = require("../../utils");
+const history = new Map();
 
 module.exports.config = {
   name: "copilot",
-  author: "Sethdico (Fixed)",
-  version: "4.7-Fixed",
+  author: "Sethdico",
+  version: "4.7-Fast",
   category: "AI",
-  description: "Microsoft Copilot with updated API parameters.",
+  description: "Microsoft Copilot.",
   adminOnly: false,
   usePrefix: false,
   cooldown: 5,
@@ -16,69 +14,39 @@ module.exports.config = {
 
 module.exports.run = async ({ event, args, api }) => {
   const senderID = event.sender.id;
-
-  // 1. HANDLE INPUT
-  // Removing the model selection logic as many of these third-party APIs 
-  // currently only accept the 'message' parameter.
   const input = args.join(" ").trim();
 
-  // 2. CLEAR MEMORY
-  if (input.toLowerCase() === "clear" || args[0]?.toLowerCase() === "clear") {
-    copilotHistory.delete(senderID);
-    return api.sendMessage("🧹 Copilot context cleared.", senderID);
+  if (input === "clear") {
+    history.delete(senderID);
+    return api.sendMessage("🧹 Context cleared.", senderID);
   }
 
-  if (!input) return api.sendMessage("💠 Usage: copilot <your question>", senderID);
-
-  if (api.sendTypingIndicator) api.sendTypingIndicator(true, senderID).catch(()=>{});
+  if (!input) return api.sendMessage("💠 Usage: copilot <text>", senderID);
+  if (api.sendTypingIndicator) api.sendTypingIndicator(true, senderID);
 
   try {
-    // 3. PREPARE MEMORY STITCHING
-    let history = copilotHistory.get(senderID) || [];
-    
-    const contextString = history
-        .slice(-3) 
-        .map(h => `Human: ${h.user}\nCopilot: ${h.bot}`)
-        .join("\n");
+    // Get context
+    let userHistory = history.get(senderID) || [];
+    const context = userHistory.slice(-3).map(h => `Human: ${h.user}\nBot: ${h.bot}`).join("\n");
+    const prompt = context ? `Context:\n${context}\n\nHuman: ${input}` : input;
 
-    let finalPrompt = input;
-    if (contextString) {
-        finalPrompt = `Context:\n${contextString}\n\nHuman: ${input}`;
-    }
-
-    // 4. API REQUEST (Fixed Parameter: message)
-    // Removed 'model' and 'url' as the error indicates only 'message' is expected/required
-    const res = await axios.get("https://shin-apis.onrender.com/ai/copilot", {
-      params: { 
-          message: finalPrompt 
-      },
-      timeout: 60000
+    const res = await http.get("https://shin-apis.onrender.com/ai/copilot", {
+        params: { message: prompt }
     });
 
-    const reply = res.data.content || res.data.response || res.data.answer;
-    
-    if (!reply) {
-        // Log error if API returned something else
-        console.error("Copilot API unexpected response:", res.data);
-        throw new Error("No response content found");
-    }
+    const reply = res.data.content || res.data.response;
+    if (!reply) throw new Error("No response");
 
-    // 5. SAVE MEMORY
-    history.push({ user: input, bot: reply });
-    if (history.length > 6) history.shift();
-    copilotHistory.set(senderID, history);
+    // Save context
+    userHistory.push({ user: input, bot: reply });
+    if (userHistory.length > 5) userHistory.shift();
+    history.set(senderID, userHistory);
 
-    // 6. SEND
-    const header = `💠 **Copilot**`;
-    await api.sendMessage(`${header}\n━━━━━━━━━━━━━━━━\n${reply}`, senderID);
+    api.sendMessage(`💠 **Copilot**\n━━━━━━━━━━━━━━━━\n${reply}`, senderID);
 
   } catch (e) {
-    console.error("Copilot Error:", e.response?.data || e.message);
-    
-    // Check if the API sent a specific error message
-    const apiError = e.response?.data?.error || "Copilot is unreachable right now.";
-    api.sendMessage(`❌ ${apiError}`, senderID);
+    api.sendMessage("❌ Copilot is unreachable.", senderID);
   } finally {
-    if (api.sendTypingIndicator) api.sendTypingIndicator(false, senderID).catch(()=>{});
+    if (api.sendTypingIndicator) api.sendTypingIndicator(false, senderID);
   }
 };
