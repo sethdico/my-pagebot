@@ -7,7 +7,7 @@ const fs = require("fs");
 const app = express();
 const config = require("./config.json");
 
-// ✅ set globals once at startup
+// ✅ Global Cache Setup
 global.PAGE_ACCESS_TOKEN = process.env.PAGE_ACCESS_TOKEN || config.PAGE_ACCESS_TOKEN;
 global.ADMINS = new Set(process.env.ADMINS?.split(",") || config.ADMINS || []);
 global.PREFIX = process.env.PREFIX || config.PREFIX || ".";
@@ -15,18 +15,16 @@ global.PREFIX = process.env.PREFIX || config.PREFIX || ".";
 const cacheDir = path.join(__dirname, "modules/scripts/commands/cache");
 const bannedPath = path.join(__dirname, "modules/scripts/commands/banned.json");
 
-// --- 🧹 startup cleaner ---
+// --- 🧹 Startup Cleaner ---
 if (!fs.existsSync(cacheDir)) {
     fs.mkdirSync(cacheDir, { recursive: true });
 } else {
-    const files = fs.readdirSync(cacheDir);
-    for (const file of files) {
+    fs.readdirSync(cacheDir).forEach(file => {
         try { fs.unlinkSync(path.join(cacheDir, file)); } catch(e) {}
-    }
-    console.log("🧹 system: cache cleared.");
+    });
 }
 
-// --- 🚫 load banned users ---
+// --- 🚫 Ban Loader ---
 global.BANNED_USERS = new Set();
 try {
     if (fs.existsSync(bannedPath)) {
@@ -37,12 +35,11 @@ try {
     if (!fs.existsSync(bannedPath)) fs.writeFileSync(bannedPath, "[]");
 }
 
-// --- 🚀 recursive command loader ---
+// --- 🚀 Recursive Command Loader ---
 global.client = { commands: new Map(), aliases: new Map(), cooldowns: new Map() };
 
 const loadCommands = (dir) => {
-    const files = fs.readdirSync(dir);
-    for (const file of files) {
+    fs.readdirSync(dir).forEach(file => {
         const filePath = path.join(dir, file);
         if (fs.statSync(filePath).isDirectory()) {
             loadCommands(filePath);
@@ -54,22 +51,20 @@ const loadCommands = (dir) => {
                     global.client.commands.set(name, cmd);
                     if (cmd.config.aliases) cmd.config.aliases.forEach(a => global.client.aliases.set(a.toLowerCase(), name));
                 }
-            } catch (e) { console.error(`❌ failed to load ${file}:`, e.message); }
+            } catch (e) { console.error(`❌ Load Error: ${file}`); }
         }
-    }
+    });
 };
 loadCommands(path.join(__dirname, "modules/scripts/commands"));
 
 app.use(parser.json({ limit: '10mb' }));
 
-// --- 🌐 routes ---
-app.get("/", (req, res) => res.send(`<h1>${config.BOTNAME || "bot"} is active</h1>`));
+app.get("/", (req, res) => res.send(`<h1>${config.BOTNAME} is Active</h1>`));
 
 app.get("/webhook", (req, res) => {
     const vToken = process.env.VERIFY_TOKEN || config.VERIFY_TOKEN;
-    if (req.query["hub.verify_token"] === vToken) {
-        res.status(200).send(req.query["hub.challenge"]);
-    } else { res.sendStatus(403); }
+    if (req.query["hub.verify_token"] === vToken) res.status(200).send(req.query["hub.challenge"]);
+    else res.sendStatus(403);
 });
 
 app.post("/webhook", (req, res) => {
@@ -77,14 +72,10 @@ app.post("/webhook", (req, res) => {
     res.sendStatus(200);
 });
 
-// ✅ global error alert for admins
+// ✅ Admin Crash Alerts
 app.use(async (err, req, res, next) => {
-    console.error("🔥 critical error:", err.stack);
-    if (global.api) {
-        global.ADMINS.forEach(id => {
-            global.api.sendMessage(`⚠️ **crash report**\n\nerror: ${err.message}`, id).catch(() => {});
-        });
-    }
+    console.error(err.stack);
+    if (global.api) global.ADMINS.forEach(id => global.api.sendMessage(`⚠️ crash: ${err.message}`, id).catch(() => {}));
     res.status(500).send("internal error");
 });
 
