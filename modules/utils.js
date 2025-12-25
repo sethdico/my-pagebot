@@ -1,5 +1,3 @@
-const config = require("../config.json");
-
 function getEventType(event) {
   return new Promise((resolve) => {
     let type = "unknown";
@@ -13,11 +11,9 @@ function getEventType(event) {
 }
 
 function log(event) {
-  const adminList = config.ADMINS || [];
-  const sender = adminList.includes(event.sender?.id) ? "ADMIN" : "USER";
+  if (event.message?.is_echo) return;
+  const sender = global.ADMINS.has(event.sender?.id) ? "ADMIN" : "USER";
   const maskedId = event.sender?.id ? `...${event.sender.id.slice(-4)}` : "unknown";
-  
-  // Clean console log without extra dependencies
   console.log(`[ ${sender} ] (${maskedId}): Event Received`);
 }
 
