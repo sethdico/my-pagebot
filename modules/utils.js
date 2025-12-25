@@ -12,7 +12,7 @@ function getEventType(event) {
 
 function log(event) {
   if (event.message?.is_echo) return;
-  // ✅ use global set
+  // use global set
   const sender = global.ADMINS.has(event.sender?.id) ? "ADMIN" : "USER";
   const maskedId = event.sender?.id ? `...${event.sender.id.slice(-4)}` : "unknown";
   console.log(`[ ${sender} ] (${maskedId}): Event Received`);
