@@ -1,21 +1,29 @@
+const axios = require("axios");
+const https = require("https");
+
+// create a fast connection instance
+// keepAlive: true means we reuse the connection (way faster)
+const http = axios.create({
+    timeout: 20000,
+    httpsAgent: new https.Agent({ keepAlive: true }),
+    headers: { 'User-Agent': 'Amduspage/Bot' }
+});
+
 function getEventType(event) {
-  return new Promise((resolve) => {
-    let type = "unknown";
+    // simple check to see what kind of msg this is
+    if (event.postback) return "postback";
     if (event.message) {
-      if (event.message.attachments) type = "attachments";
-      else if (event.message.reply_to) type = "message_reply";
-      else type = "message";
-    } else if (event.postback) type = "postback";
-    resolve(type);
-  });
+        if (event.message.attachments) return "attachment";
+        if (event.message.reply_to) return "reply";
+        return "text"; // normal text
+    }
+    return "unknown";
 }
 
 function log(event) {
-  if (event.message?.is_echo) return;
-  // use global set
-  const sender = global.ADMINS.has(event.sender?.id) ? "ADMIN" : "USER";
-  const maskedId = event.sender?.id ? `...${event.sender.id.slice(-4)}` : "unknown";
-  console.log(`[ ${sender} ] (${maskedId}): Event Received`);
+    if (event.message?.is_echo) return;
+    const sender = global.ADMINS.has(event.sender?.id) ? "ADMIN" : "USER";
+    console.log(`[${sender}] Msg received`);
 }
 
-module.exports = { log, getEventType };
+module.exports = { http, log, getEventType };
