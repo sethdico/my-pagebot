@@ -1,76 +1,38 @@
-const axios = require("axios");
+const { http } = require("../../utils");
 
 module.exports.config = {
   name: "nasa",
-  author: "Sethdico (Improved)",
-  version: "1.5",
+  author: "Sethdico",
+  version: "1.5-Fast",
   category: "Fun",
-  description: "View NASA's Astronomy Picture of the Day.\nUsage:\n• nasa (Today's photo)\n• nasa random (A surprise photo)",
+  description: "Space photo of the day.",
   adminOnly: false,
   usePrefix: false,
   cooldown: 5,
 };
 
 module.exports.run = async function ({ event, args, api }) {
-  const senderID = event.sender.id;
-  
-  // ✅ FIXED: Pulled from Environment
-  const NASA_API_KEY = process.env.NASA_API_KEY; 
-  
-  const isRandom = args[0]?.toLowerCase() === "random";
-  let apiUrl = `https://api.nasa.gov/planetary/apod?api_key=${NASA_API_KEY}`;
+  const apiKey = process.env.NASA_API_KEY; 
+  let url = `https://api.nasa.gov/planetary/apod?api_key=${apiKey}`;
+  if (args[0] === "random") url += "&count=1";
 
-  if (isRandom) {
-    apiUrl += "&count=1";
-  }
-
-  if (api.sendTypingIndicator) api.sendTypingIndicator(true, senderID);
+  if (api.sendTypingIndicator) api.sendTypingIndicator(true, event.sender.id);
 
   try {
-    const response = await axios.get(apiUrl, { timeout: 10000 });
-    let data = response.data;
-    if (Array.isArray(data)) data = data[0];
+    const res = await http.get(url);
+    const data = Array.isArray(res.data) ? res.data[0] : res.data;
 
-    if (!data) throw new Error("No data received from NASA");
+    const msg = `🌌 **${data.title}**\n📅 ${data.date}\n\n${data.explanation.substring(0, 400)}...`;
 
-    const title = data.title || "NASA Astronomy Picture";
-    const date = data.date || "Unknown Date";
-    const explanation = data.explanation || "No description available.";
-    const mediaType = data.media_type; 
-    const hdUrl = data.hdurl || data.url;
-
-    const cleanExplanation = explanation.length > 450 
-      ? explanation.substring(0, 450) + "..." 
-      : explanation;
-
-    const msg = `🌌 **NASA: ${title.toUpperCase()}**\n━━━━━━━━━━━━━━━━\n📅 **Date:** ${date}\n\n📝 ${cleanExplanation}\n━━━━━━━━━━━━━━━━`;
-
-    if (mediaType === "image") {
-      await api.sendAttachment("image", hdUrl, senderID);
-    } 
-    
-    const buttons = [
-      { 
-        type: "postback", 
-        title: "🎲 Random Photo", 
-        payload: "nasa random" 
-      }
-    ];
-
-    if (hdUrl) {
-        buttons.push({ 
-          type: "web_url", 
-          url: hdUrl, 
-          title: mediaType === "video" ? "🎥 Watch Video" : "🖼️ View HD" 
-        });
+    if (data.media_type === "image") {
+      await api.sendAttachment("image", data.hdurl || data.url, event.sender.id);
     }
-
-    await api.sendButton(msg, buttons, senderID);
+    
+    // Buttons sometimes fail on mobile, so we send text first
+    const buttons = [{ type: "postback", title: "🎲 Random", payload: "nasa random" }];
+    api.sendButton(msg, buttons, event.sender.id);
 
   } catch (error) {
-    console.error("NASA API Error:", error.message);
-    api.sendMessage("❌ NASA servers are busy.", senderID);
-  } finally {
-    if (api.sendTypingIndicator) api.sendTypingIndicator(false, senderID);
+    api.sendMessage("❌ NASA servers are busy.", event.sender.id);
   }
 };
