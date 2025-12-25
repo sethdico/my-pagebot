@@ -2,27 +2,18 @@ const fs = require("fs");
 const path = require("path");
 
 module.exports = async function (event) {
-  const config = require("../config.json");
   const api = {};
-  
-  // ✅ DYNAMIC LOADER: Scans the folder so you never have to edit this list again
   const srcPath = path.join(__dirname, "src");
-  const scripts = fs.readdirSync(srcPath).filter(file => file.endsWith(".js"));
 
-  for (const file of scripts) {
+  // ✅ Automatically loads all files in page/src/
+  fs.readdirSync(srcPath).filter(f => f.endsWith(".js")).forEach(file => {
     try {
       const scriptName = path.parse(file).name;
-      const loadedScript = require(`./src/${file}`);
-      if (typeof loadedScript === "function") {
-        api[scriptName] = loadedScript(event);
-      }
-    } catch (e) {
-      console.error(`❌ Failed to load API script: ${file}`, e);
-    }
-  }
+      const loaded = require(`./src/${file}`);
+      if (typeof loaded === "function") api[scriptName] = loaded(event);
+    } catch (e) { console.error(`❌ API Load Fail: ${file}`); }
+  });
   
   global.api = api;
-  global.PREFIX = config.PREFIX;
-  
   require("./handler.js")(event);
 };
