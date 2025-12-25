@@ -1,4 +1,4 @@
-const axios = require("axios");
+const { http } = require("../../utils"); // fast connection
 const fs = require("fs");
 const path = require("path");
 const { URL } = require("url");
@@ -19,7 +19,6 @@ async function sendYouTubeThumbnail(youtubeUrl, senderID, api) {
     const regExp = /^.*(youtu\.be\/|v\/|u\/\w\/|embed\/|watch\?v=|&v=)([^#&?]*).*/;
     const match = youtubeUrl.match(regExp);
     if (match && match[2].length === 11) {
-      // ✅ FIXED: Corrected YouTube thumbnail URL
       const thumbnailUrl = `https://img.youtube.com/vi/${match[2]}/maxresdefault.jpg`;
       await api.sendAttachment("image", thumbnailUrl, senderID);
     }
@@ -29,7 +28,7 @@ async function sendYouTubeThumbnail(youtubeUrl, senderID, api) {
 module.exports.config = {
   name: "ai",
   author: "Sethdico",
-  version: "16.9",
+  version: "16.9-Fast",
   category: "AI",
   description: "chat, vision, youtube videos, real-time info and files.",
   adminOnly: false,
@@ -78,7 +77,8 @@ module.exports.run = async function ({ event, args, api, reply }) {
     const identityPrompt = `[SYSTEM]: Amdusbot by Sethdico. Helpful, lowkey, intelligent. Response limit 2000 chars. Maker: Seth Asher Salinguhay.`;
     let sessionData = sessions.get(senderID) || { chatSessionId: null };
 
-    const response = await axios.post(CONFIG.API_URL, {
+    // use http instead of axios
+    const response = await http.post(CONFIG.API_URL, {
       model: CONFIG.MODEL_ID,
       messages: [{ role: "user", content: `${identityPrompt}\n\nInput: ${userPrompt}\n${imageUrl ? `[IMAGE]: ${imageUrl}` : ""}` }],
       chatSessionId: sessionData.chatSessionId,
@@ -113,7 +113,8 @@ module.exports.run = async function ({ event, args, api, reply }) {
       const filePath = path.join(cacheDir, fileName);
       const fileWriter = fs.createWriteStream(filePath);
 
-      const fileRes = await axios({ url: fileUrl, method: 'GET', responseType: 'stream' });
+      // use http for stream
+      const fileRes = await http({ url: fileUrl, method: 'GET', responseType: 'stream' });
       fileRes.data.pipe(fileWriter);
       await new Promise((resolve) => fileWriter.on('finish', resolve));
 
