@@ -5,7 +5,6 @@ const tools = {};
 const srcPath = path.join(__dirname, "src");
 
 // load all the api scripts just once when bot starts
-// this saves memory and cpu
 try {
     fs.readdirSync(srcPath).filter(f => f.endsWith(".js")).forEach(file => {
         const name = path.parse(file).name;
@@ -13,7 +12,7 @@ try {
     });
     console.log(`Loaded ${Object.keys(tools).length} API tools`);
 } catch (e) {
-    console.log("❌ Error loading API tools:", e);
+    console.log("Error loading API tools:", e);
 }
 
 module.exports = async function (event) {
@@ -22,7 +21,7 @@ module.exports = async function (event) {
 
     // attach our pre-loaded tools
     for (const key in tools) {
-        // pass 'event' so the tool knows who to reply to
+        // pass 'event' so the tool knows who to reply to automatically
         api[key] = tools[key](event);
     }
 
