@@ -3,33 +3,40 @@ const os = require('os');
 module.exports.config = {
     name: "stats",
     author: "Sethdico",
-    version: "1.0",
+    version: "1.1",
     category: "Admin",
-    description: "View system performance and bot statistics.",
+    description: "check bot health.",
     adminOnly: true,
-    usePrefix: true,
+    usePrefix: false,
     cooldown: 5
 };
 
-module.exports.run = async function ({ api, reply }) {
-    const memUsage = process.memoryUsage();
-    const toMB = (bytes) => (bytes / 1024 / 1024).toFixed(2);
+module.exports.run = async function ({ reply }) {
+    try {
+        const mem = process.memoryUsage();
+        const uptime = process.uptime();
+        
+        const hrs = Math.floor(uptime / 3600);
+        const mins = Math.floor((uptime % 3600) / 60);
 
-    const statsMsg = `📊 **SYSTEM STATISTICS**
+        const msg = `📊 **stats**
 ━━━━━━━━━━━━━━━━
-🤖 **Commands:** ${global.client.commands.size}
-🛡️ **Admins:** ${global.ADMINS.size}
-🚫 **Banned:** ${global.BANNED_USERS.size}
+🤖 **cmds:** ${global.client?.commands?.size || 0}
+🛡️ **admins:** ${global.ADMINS?.size || 0}
+🚫 **banned:** ${global.BANNED_USERS?.size || 0}
 
-🧠 **RAM USAGE**
-• Resident Set: ${toMB(memUsage.rss)} MB
-• Heap Used: ${toMB(memUsage.heapUsed)} MB
-• Heap Total: ${toMB(memUsage.heapTotal)} MB
+🧠 **memory**
+• used: ${(mem.heapUsed / 1024 / 1024).toFixed(2)} MB
+• total: ${(mem.heapTotal / 1024 / 1024).toFixed(2)} MB
 
-🖥️ **SERVER**
-• Platform: ${os.platform()} (${os.arch()})
-• CPU Cores: ${os.cpus().length}
-• Uptime: ${Math.floor(process.uptime() / 3600)}h ${Math.floor((process.uptime() % 3600) / 60)}m`;
+🖥️ **system**
+• load: ${os.loadavg()[0].toFixed(2)}
+• uptime: ${hrs}h ${mins}m
+• platform: ${os.platform()}`;
 
-    reply(statsMsg);
+        return reply(msg);
+    } catch (e) {
+        console.error(e);
+        return reply("❌ stats failed. check logs.");
+    }
 };
