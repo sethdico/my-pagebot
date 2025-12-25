@@ -2,11 +2,11 @@ const axios = require("axios");
 
 module.exports.config = {
     name: "wolfram",
-    aliases: ["wa", "calc"],
-    author: "Sethdico",
-    version: "2.0-Smart",
+    aliases: ["wa", "calc", "math"],
+    author: "Sethdico (Ultra-Optimized)",
+    version: "4.0",
     category: "Utility",
-    description: "Advanced Computational Knowledge (Math, Science, Facts).",
+    description: "Deep-search computational knowledge. Extracts all available data pods.",
     adminOnly: false,
     usePrefix: false,
     cooldown: 5,
@@ -14,74 +14,86 @@ module.exports.config = {
 
 module.exports.run = async function ({ event, args, api }) {
     const input = args.join(" ");
-    if (!input) return api.sendMessage("🧮 Usage: wolfram <query>\nEx: wolfram integrate x^2\nEx: wolfram distance to mars", event.sender.id);
+    const senderID = event.sender.id;
 
-    if (api.sendTypingIndicator) api.sendTypingIndicator(true, event.sender.id).catch(()=>{});
+    if (!input) return api.sendMessage("🧮 Usage: wolfram <query>", senderID);
+    if (api.sendTypingIndicator) api.sendTypingIndicator(true, senderID).catch(() => {});
 
-    // ✅ FIXED: Pulled from Environment
     const APP_ID = process.env.WOLFRAM_APP_ID;
 
     try {
         const url = `http://api.wolframalpha.com/v2/query?appid=${APP_ID}&input=${encodeURIComponent(input)}&output=json`;
-        const response = await axios.get(url, { timeout: 20000 });
-        const data = response.data.queryresult;
+        const { data } = await axios.get(url, { timeout: 30000 });
+        const res = data.queryresult;
 
-        if (data.success === false) {
-            if (data.didyoumeans) {
-                const suggestions = data.didyoumeans.map(d => d.val).join("\n• ");
-                return api.sendMessage(`❌ Check your spelling.\n🤔 **Did you mean:**\n• ${suggestions}`, event.sender.id);
+        // 1. HANDLE FAILURE / SUGGESTIONS
+        if (!res.success) {
+            let errorMsg = "❌ Wolfram Alpha couldn't find a direct answer.";
+            if (res.didyoumeans) {
+                const suggestions = Array.isArray(res.didyoumeans) ? res.didyoumeans : [res.didyoumeans];
+                errorMsg += `\n\n🤔 **Did you mean:**\n• ${suggestions.slice(0, 3).map(s => s.val).join("\n• ")}`;
             }
-            return api.sendMessage("❌ Wolfram Alpha couldn't understand that query.", event.sender.id);
+            return api.sendMessage(errorMsg, senderID);
         }
 
-        let inputInterp = "Query";
-        let resultText = "";
-        let resultImage = "";
-        let extraInfo = "";
+        // 2. EXTRACTION LOGIC
+        let interpretation = "";
+        let primaryResult = "";
+        let extendedData = [];
+        let images = [];
 
-        for (const pod of data.pods) {
-            if (pod.title === "Input" || pod.title === "Input interpretation") {
-                inputInterp = pod.subpods[0].plaintext;
+        for (const pod of res.pods) {
+            const title = pod.title;
+            const text = pod.subpods[0]?.plaintext;
+            const imgSrc = pod.subpods[0]?.img?.src;
+
+            // Save Plots/Graphs
+            if (imgSrc && (title.includes("Plot") || title.includes("Graph") || title.includes("Map") || title.includes("Illustration"))) {
+                images.push(imgSrc);
             }
-            if (pod.primary === true || pod.title === "Result" || pod.title === "Decimal approximation" || pod.title === "Exact result") {
-                resultText = pod.subpods[0].plaintext;
-                if (!resultText) resultImage = pod.subpods[0].img.src;
-            }
-            if (!resultImage && (pod.title.includes("Plot") || pod.title.includes("Graph"))) {
-                resultImage = pod.subpods[0].img.src;
+
+            if (!text) continue;
+
+            // Categorize text data
+            if (title === "Input interpretation" || title === "Input") {
+                interpretation = text;
+            } else if (pod.primary || ["Result", "Decimal approximation", "Solution", "Value"].includes(title)) {
+                primaryResult = text;
+            } else {
+                // Add everything else to extended data
+                extendedData.push(`📍 **${title}**\n${text}`);
             }
         }
 
-        if (!resultText && !resultImage && data.pods.length > 1) {
-            const fallbackPod = data.pods[1];
-            resultText = fallbackPod.subpods[0].plaintext;
-            resultImage = fallbackPod.subpods[0].img.src;
-            extraInfo = `(${fallbackPod.title})`;
+        // 3. BUILD THE MESSAGE (Optimized for FB 2000-char limit)
+        let header = `🧮 **WOLFRAM KNOWLEDGE**\n━━━━━━━━━━━━━━━━\n`;
+        let body = `📥 **Query:** ${interpretation || input}\n\n`;
+        body += `📤 **Primary Answer:**\n${primaryResult || "See details below."}\n\n`;
+
+        if (extendedData.length > 0) {
+            body += `━━━━━━━━━━━━━━━━\n${extendedData.join("\n\n")}`;
         }
 
-        const cleanInput = inputInterp.length > 100 ? inputInterp.substring(0, 100) + "..." : inputInterp;
-        const cleanResult = resultText || "Check the image below.";
+        // Truncate to avoid Facebook crash (Safe limit: 1900 chars)
+        if (body.length > 1800) body = body.substring(0, 1797) + "...";
 
-        const msg = `🧮 **Wolfram Alpha**\n━━━━━━━━━━━━━━━━\n📥 **Input:** ${cleanInput}\n\n📤 **Result:** ${extraInfo}\n${cleanResult}`;
-        const webUrl = `https://www.wolframalpha.com/input/?i=${encodeURIComponent(input)}`;
-        const buttons = [
-            {
-                type: "web_url",
-                url: webUrl,
-                title: "🌐 Full Details"
+        const finalMsg = header + body;
+        const buttons = [{ type: "web_url", url: `https://www.wolframalpha.com/input/?i=${encodeURIComponent(input)}`, title: "🌐 View Full Source" }];
+
+        // 4. SEND RESPONSE
+        await api.sendButton(finalMsg, buttons, senderID);
+
+        // Send top 2 images (Primary result + Plot)
+        if (images.length > 0) {
+            for (const img of images.slice(0, 2)) {
+                await api.sendAttachment("image", img, senderID);
             }
-        ];
-
-        await api.sendButton(msg, buttons, event.sender.id);
-
-        if (resultImage) {
-            await api.sendAttachment("image", resultImage, event.sender.id);
         }
 
     } catch (e) {
         console.error("Wolfram Error:", e.message);
-        api.sendMessage("❌ Connection timed out or API limit reached.", event.sender.id);
+        api.sendMessage("❌ Connection timed out. Try a simpler query.", senderID);
     } finally {
-        if (api.sendTypingIndicator) api.sendTypingIndicator(false, event.sender.id).catch(()=>{});
+        if (api.sendTypingIndicator) api.sendTypingIndicator(false, senderID).catch(() => {});
     }
 };
