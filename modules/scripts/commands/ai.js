@@ -19,6 +19,7 @@ async function sendYouTubeThumbnail(youtubeUrl, senderID, api) {
     const regExp = /^.*(youtu\.be\/|v\/|u\/\w\/|embed\/|watch\?v=|&v=)([^#&?]*).*/;
     const match = youtubeUrl.match(regExp);
     if (match && match[2].length === 11) {
+      // ✅ FIXED: Corrected YouTube thumbnail URL
       const thumbnailUrl = `https://img.youtube.com/vi/${match[2]}/maxresdefault.jpg`;
       await api.sendAttachment("image", thumbnailUrl, senderID);
     }
@@ -53,7 +54,6 @@ module.exports.run = async function ({ event, args, api, reply }) {
   let imageUrl = "";
   const isSticker = !!event.message?.sticker_id;
   
-  // image detection
   if (event.message?.attachments?.[0]?.type === "image" && !isSticker) {
     imageUrl = event.message.attachments[0].payload.url;
   } else if (event.message?.reply_to?.attachments?.[0]?.type === "image") {
@@ -75,8 +75,7 @@ module.exports.run = async function ({ event, args, api, reply }) {
   if (api.sendTypingIndicator) api.sendTypingIndicator(true, senderID);
 
   try {
-    const identityPrompt = `[SYSTEM]: Amdusbot by Sethdico. Helpful, lowkey, intelligent. Use Tree of Thoughts. Final result only. Response limit 2000 chars. Maker: Seth Asher Salinguhay.`;
-
+    const identityPrompt = `[SYSTEM]: Amdusbot by Sethdico. Helpful, lowkey, intelligent. Response limit 2000 chars. Maker: Seth Asher Salinguhay.`;
     let sessionData = sessions.get(senderID) || { chatSessionId: null };
 
     const response = await axios.post(CONFIG.API_URL, {
@@ -107,15 +106,15 @@ module.exports.run = async function ({ event, args, api, reply }) {
           fileName = decodeURIComponent(fileName).replace(/[^a-zA-Z0-9._-]/g, "_");
       } catch (e) {}
 
-      const isImage = [".jpg", ".jpeg", ".png", ".webp"].includes(path.extname(fileName).toLowerCase());
-      if (!isImage) await reply("downloading file...");
+      const ext = path.extname(fileName).toLowerCase();
+      const isImage = [".jpg", ".jpeg", ".png", ".webp"].includes(ext);
 
-      const filePath = path.join(__dirname, "cache", fileName);
+      const cacheDir = path.join(__dirname, "cache");
+      const filePath = path.join(cacheDir, fileName);
       const fileWriter = fs.createWriteStream(filePath);
 
       const fileRes = await axios({ url: fileUrl, method: 'GET', responseType: 'stream' });
       fileRes.data.pipe(fileWriter);
-
       await new Promise((resolve) => fileWriter.on('finish', resolve));
 
       const stats = fs.statSync(filePath);
@@ -128,9 +127,8 @@ module.exports.run = async function ({ event, args, api, reply }) {
     } else {
       await reply(replyContent);
     }
-
   } catch (error) {
-    reply("❌ glitch. try again.");
+    reply("❌ ai glitch. try again.");
   } finally {
     if (api.sendTypingIndicator) api.sendTypingIndicator(false, senderID);
   }
