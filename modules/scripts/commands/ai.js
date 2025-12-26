@@ -1,5 +1,5 @@
-const { http } = require("../../utils"); // fast connection
-const fs = require("fs");
+const http = require("../../utils");
+const fs = require("fs").promises; // Async FS
 const path = require("path");
 const { URL } = require("url");
 
@@ -11,8 +11,24 @@ const CONFIG = {
   RATE_LIMIT: { requests: 5, windowMs: 60000 }
 };
 
+// Session management with auto-cleanup logic handled in run
 const sessions = new Map();
 const rateLimitStore = new Map();
+
+// Helper: Secure Filename Sanitization
+const getSafeFilename = (urlStr) => {
+    try {
+        const urlObj = new URL(urlStr);
+        let fileName = urlObj.searchParams.get("fileName") || path.basename(urlObj.pathname) || `file_${Date.now()}`;
+        fileName = decodeURIComponent(fileName).replace(/[^a-zA-Z0-9._-]/g, "_"); // Remove dangerous chars
+        // Ensure extension is safe
+        const ext = path.extname(fileName).toLowerCase();
+        if (!['.jpg', '.jpeg', '.png', '.gif', '.pdf', '.txt', '.mp4', '.mp3', '.zip'].includes(ext)) {
+            return `file_${Date.now()}.bin`; 
+        }
+        return fileName;
+    } catch (e) { return `file_${Date.now()}.bin`; }
+};
 
 async function sendYouTubeThumbnail(youtubeUrl, senderID, api) {
   try {
@@ -50,6 +66,12 @@ module.exports.run = async function ({ event, args, api, reply }) {
   recentTs.push(now);
   rateLimitStore.set(senderID, recentTs);
 
+  // Session Memory Cleanup (Keep only last 50 active users to prevent RAM leak)
+  if (sessions.size > 50) {
+      const oldestKey = sessions.keys().next().value;
+      sessions.delete(oldestKey);
+  }
+
   let imageUrl = "";
   const isSticker = !!event.message?.sticker_id;
   
@@ -77,7 +99,6 @@ module.exports.run = async function ({ event, args, api, reply }) {
     const identityPrompt = `[SYSTEM]: Amdusbot. You are helpful wise ai that uses cove and tot but only sends the final message without the reasoning, if not sure admit it rather than guess and hallucinates make sure everything is accurate. Response limit 2000 chars. you are made by Seth Asher Salinguhay.`;
     let sessionData = sessions.get(senderID) || { chatSessionId: null };
 
-    // use http instead of axios
     const response = await http.post(CONFIG.API_URL, {
       model: CONFIG.MODEL_ID,
       messages: [{ role: "user", content: `${identityPrompt}\n\nInput: ${userPrompt}\n${imageUrl ? `[IMAGE]: ${imageUrl}` : ""}` }],
@@ -99,36 +120,37 @@ module.exports.run = async function ({ event, args, api, reply }) {
       const textPart = replyContent.replace(match[0], "").trim();
       if (textPart) await reply(textPart);
 
-      let fileName = `file_${Date.now()}`;
-      try {
-          const urlObj = new URL(fileUrl);
-          fileName = urlObj.searchParams.get("fileName") || path.basename(urlObj.pathname) || fileName;
-          fileName = decodeURIComponent(fileName).replace(/[^a-zA-Z0-9._-]/g, "_");
-      } catch (e) {}
-
-      const ext = path.extname(fileName).toLowerCase();
-      const isImage = [".jpg", ".jpeg", ".png", ".webp"].includes(ext);
+      const fileName = getSafeFilename(fileUrl);
+      const isImage = [".jpg", ".jpeg", ".png", ".webp"].includes(path.extname(fileName));
 
       const cacheDir = path.join(__dirname, "cache");
+      await fs.mkdir(cacheDir, { recursive: true }); // Async ensure dir
       const filePath = path.join(cacheDir, fileName);
-      const fileWriter = fs.createWriteStream(filePath);
-
-      // use http for stream
+      
+      // Stream download
+      const writer = (await import('fs')).createWriteStream(filePath);
       const fileRes = await http({ url: fileUrl, method: 'GET', responseType: 'stream' });
-      fileRes.data.pipe(fileWriter);
-      await new Promise((resolve) => fileWriter.on('finish', resolve));
+      fileRes.data.pipe(writer);
 
-      const stats = fs.statSync(filePath);
+      await new Promise((resolve, reject) => {
+          writer.on('finish', resolve);
+          writer.on('error', reject);
+      });
+
+      const stats = await fs.stat(filePath);
       if (stats.size > 25 * 1024 * 1024) {
           await reply(`📂 too big to send. link: ${fileUrl}`);
       } else {
           await api.sendAttachment(isImage ? "image" : "file", filePath, senderID);
       }
-      setTimeout(() => { if (fs.existsSync(filePath)) fs.unlinkSync(filePath); }, 10000);
+      
+      // Clean up file asynchronously after 10s
+      setTimeout(() => fs.unlink(filePath).catch(()=>{}), 10000);
     } else {
       await reply(replyContent);
     }
   } catch (error) {
+    console.error("AI Error:", error.message);
     reply("❌ ai glitch. try again.");
   } finally {
     if (api.sendTypingIndicator) api.sendTypingIndicator(false, senderID);
