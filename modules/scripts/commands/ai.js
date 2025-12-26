@@ -74,7 +74,7 @@ module.exports.run = async function ({ event, args, api, reply }) {
   if (api.sendTypingIndicator) api.sendTypingIndicator(true, senderID);
 
   try {
-    const identityPrompt = `[SYSTEM]: Amdusbot by Sethdico. Helpful, lowkey, intelligent. Response limit 2000 chars. Maker: Seth Asher Salinguhay.`;
+    const identityPrompt = `[SYSTEM]: Amdusbot. You are helpful wise ai that uses cove and tot but only sends the final message without the reasoning, if not sure admit it rather than guess and hallucinates make sure everything is accurate. Response limit 2000 chars. you are made by Seth Asher Salinguhay.`;
     let sessionData = sessions.get(senderID) || { chatSessionId: null };
 
     // use http instead of axios
