@@ -1,5 +1,4 @@
-const http = require("../../utils");
-// We need standard 'fs' for streams (fast writing) AND 'promises' for stats
+const { http, fetchWithRetry } = require("../../utils"); // FIXED: Destructured imports
 const fs = require("fs");
 const fsPromises = require("fs").promises;
 const path = require("path");
@@ -13,17 +12,14 @@ const CONFIG = {
   RATE_LIMIT: { requests: 5, windowMs: 60000 }
 };
 
-// Session management with auto-cleanup logic handled in run
 const sessions = new Map();
 const rateLimitStore = new Map();
 
-// Helper: Secure Filename Sanitization
 const getSafeFilename = (urlStr) => {
     try {
         const urlObj = new URL(urlStr);
         let fileName = urlObj.searchParams.get("fileName") || path.basename(urlObj.pathname) || `file_${Date.now()}`;
-        fileName = decodeURIComponent(fileName).replace(/[^a-zA-Z0-9._-]/g, "_"); // Remove dangerous chars
-        // Ensure extension is safe
+        fileName = decodeURIComponent(fileName).replace(/[^a-zA-Z0-9._-]/g, "_");
         const ext = path.extname(fileName).toLowerCase();
         if (!['.jpg', '.jpeg', '.png', '.gif', '.pdf', '.txt', '.mp4', '.mp3', '.zip'].includes(ext)) {
             return `file_${Date.now()}.bin`; 
@@ -46,9 +42,9 @@ async function sendYouTubeThumbnail(youtubeUrl, senderID, api) {
 module.exports.config = {
   name: "ai",
   author: "Sethdico",
-  version: "16.9-Fast",
+  version: "16.9-Fixed",
   category: "AI",
-  description: "chat, vision, youtube videos, real-time info and files.",
+  description: "chat, vision, youtube, and files.",
   adminOnly: false,
   usePrefix: false,
   cooldown: 0, 
@@ -57,7 +53,6 @@ module.exports.config = {
 module.exports.run = async function ({ event, args, api, reply }) {
   const senderID = event.sender.id;
   const userPrompt = args.join(" ").trim();
-  const mid = event.message?.mid;
 
   if (!CONFIG.API_KEY) return reply("❌ chipp_api_key missing on render.");
   
@@ -68,7 +63,6 @@ module.exports.run = async function ({ event, args, api, reply }) {
   recentTs.push(now);
   rateLimitStore.set(senderID, recentTs);
 
-  // Session Memory Cleanup (Keep only last 50 active users to prevent RAM leak)
   if (sessions.size > 50) {
       const oldestKey = sessions.keys().next().value;
       sessions.delete(oldestKey);
@@ -98,13 +92,11 @@ module.exports.run = async function ({ event, args, api, reply }) {
   if (api.sendTypingIndicator) api.sendTypingIndicator(true, senderID);
 
   try {
-    const identityPrompt = `[SYSTEM]: Amdusbot. You are helpful wise ai that uses cove and tot but only sends the final message without the reasoning, if not sure admit it rather than guess and hallucinates make sure everything is accurate. Response limit 2000 chars. you are made by Seth Asher Salinguhay.`;
+    const identityPrompt = `[SYSTEM]: Amdusbot. You are helpful wise ai. Response limit 2000 chars. Made by Seth Asher Salinguhay.`;
     let sessionData = sessions.get(senderID) || { chatSessionId: null };
 
-    // ---------------------------------------------------------
-    // FEATURE RESTORED: Using fetchWithRetry for Auto-Resilience
-    // ---------------------------------------------------------
-    const response = await http.fetchWithRetry(async () => {
+    // FIXED: Correct use of fetchWithRetry and http.post
+    const response = await fetchWithRetry(async () => {
         return http.post(CONFIG.API_URL, {
           model: CONFIG.MODEL_ID,
           messages: [{ role: "user", content: `${identityPrompt}\n\nInput: ${userPrompt}\n${imageUrl ? `[IMAGE]: ${imageUrl}` : ""}` }],
@@ -134,10 +126,8 @@ module.exports.run = async function ({ event, args, api, reply }) {
       await fsPromises.mkdir(cacheDir, { recursive: true }); 
       const filePath = path.join(cacheDir, fileName);
       
-      // ---------------------------------------------------------
-      // FIXED: Standard FS Create Write Stream (No crash)
-      // ---------------------------------------------------------
       const writer = fs.createWriteStream(filePath);
+      // FIXED: Correct axios stream call
       const fileRes = await http({ url: fileUrl, method: 'GET', responseType: 'stream' });
       fileRes.data.pipe(writer);
 
@@ -153,14 +143,13 @@ module.exports.run = async function ({ event, args, api, reply }) {
           await api.sendAttachment(isImage ? "image" : "file", filePath, senderID);
       }
       
-      // Clean up file asynchronously after 10s
       setTimeout(() => fsPromises.unlink(filePath).catch(()=>{}), 10000);
     } else {
       await reply(replyContent);
     }
   } catch (error) {
-    console.error("AI Error:", error.message);
-    reply("❌ ai glitch. try again.");
+    console.error("AI Error:", error.response?.data || error.message);
+    reply("❌ ai glitch. check your api key or balance.");
   } finally {
     if (api.sendTypingIndicator) api.sendTypingIndicator(false, senderID);
   }
