@@ -1,5 +1,15 @@
-const db = require("../../../modules/database");
+const db = require("../../../database");
 const activeReminders = new Map();
+
+// FIX: Require the API directly so it works on startup
+// Note: We use a getter or deferred require if circular dependency is a risk, 
+// but here it is safe because main.js exports 'api' independently.
+let api;
+try {
+    api = require("../../../../page/main").api;
+} catch (e) {
+    console.warn("API not ready for reminders yet.");
+}
 
 const loadReminders = () => {
     db.getActiveReminders((list) => {
@@ -9,12 +19,10 @@ const loadReminders = () => {
                 const delay = r.fireAt - Date.now();
                 if (delay > 0 && delay < 2147483647) {
                     r.timeoutId = setTimeout(() => {
-                        // Use global.api fallback if needed, or inject api later
-                        // For this implementation, we assume api is passed or global
-                        // Ideally, we inject api, but for reminders we might need global access
-                        // Let's rely on main.js passing 'api' implicitly or check global
-                        if (global.api) global.api.sendMessage(`⏰ **REMINDER**\n"${r.message}"`, r.userId);
+                        // FIX: Use the imported api object
+                        if (api) api.sendMessage(`⏰ **REMINDER**\n"${r.message}"`, r.userId);
                         activeReminders.delete(r.id);
+                        db.deleteReminder(r.id); // Optional: cleanup DB
                     }, delay);
                 }
             }
@@ -22,27 +30,31 @@ const loadReminders = () => {
     });
 };
 
-module.exports.config = { name: "remind", author: "Sethdico", version: "2.1", category: "Utility", description: "Set a reminder.", adminOnly: false, usePrefix: false, cooldown: 3 };
+module.exports.config = { name: "remind", author: "Sethdico", version: "2.2", category: "Utility", description: "Set a reminder.", adminOnly: false, usePrefix: false, cooldown: 3 };
 
-module.exports.run = async ({ event, args, api }) => {
+module.exports.run = async ({ event, args, api: commandApi }) => {
+  // Update local api reference if command runs (just in case)
+  if (!api) api = commandApi;
+  
   const senderID = event.sender.id;
-  // Inject api into global for the reminder timeout callback (Simple workaround)
-  global.api = api; 
-
   const input = args.join(" ");
+
   if (args[0] === "list") {
     const list = [...activeReminders.values()].filter(r => r.userId === senderID);
-    return api.sendMessage(list.length ? list.map((r,i)=>`${i+1}. ${r.message}`).join("\n") : "📝 Empty", senderID);
+    return commandApi.sendMessage(list.length ? list.map((r,i)=>`${i+1}. ${r.message}`).join("\n") : "📝 Empty", senderID);
   }
+  
   if (args[0] === "clear") {
-    [...activeReminders.keys()].filter(k => activeReminders.get(k).userId === senderID).forEach(k => {
-        clearTimeout(activeReminders.get(k).timeoutId);
-        activeReminders.delete(k);
+    [...activeReminders.values()].filter(r => r.userId === senderID).forEach(r => {
+        clearTimeout(r.timeoutId);
+        activeReminders.delete(r.id);
+        db.deleteReminder(r.id);
     });
-    return api.sendMessage("✅ Cleared.", senderID);
+    return commandApi.sendMessage("✅ Cleared.", senderID);
   }
+
   const match = input.match(/^(\d+)([smhd])\s+(.+)$/);
-  if (!match) return api.sendMessage("⏰ Usage: remind 10m <msg>", senderID);
+  if (!match) return commandApi.sendMessage("⏰ Usage: remind 10m <msg>", senderID);
   
   const units = { s: 1000, m: 60000, h: 3600000, d: 86400000 };
   const reminder = {
@@ -58,12 +70,14 @@ module.exports.run = async ({ event, args, api }) => {
   const delay = reminder.fireAt - Date.now();
   if (delay > 0 && delay < 2147483647) {
       reminder.timeoutId = setTimeout(() => {
-          if (global.api) global.api.sendMessage(`⏰ **REMINDER**\n"${reminder.message}"`, reminder.userId);
+          if (api) api.sendMessage(`⏰ **REMINDER**\n"${reminder.message}"`, reminder.userId);
           activeReminders.delete(reminder.id);
+          db.deleteReminder(reminder.id);
       }, delay);
   }
 
-  api.sendMessage(`✅ Reminder set.`, senderID);
+  commandApi.sendMessage(`✅ Reminder set.`, senderID);
 };
 
+// Start the listener
 loadReminders();
