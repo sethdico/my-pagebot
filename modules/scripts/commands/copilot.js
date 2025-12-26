@@ -1,4 +1,4 @@
-const { http } = require("../../utils");
+const http = require("../../utils");
 const history = new Map();
 
 module.exports.config = {
@@ -24,8 +24,13 @@ module.exports.run = async ({ event, args, api }) => {
   if (!input) return api.sendMessage("💠 Usage: copilot <text>", senderID);
   if (api.sendTypingIndicator) api.sendTypingIndicator(true, senderID);
 
+  // CLEANUP: Prevent RAM bloat
+  if (history.size > 100) {
+      const keys = [...history.keys()];
+      for(let i=0; i<20; i++) history.delete(keys[i]);
+  }
+
   try {
-    // Get context
     let userHistory = history.get(senderID) || [];
     const context = userHistory.slice(-3).map(h => `Human: ${h.user}\nBot: ${h.bot}`).join("\n");
     const prompt = context ? `Context:\n${context}\n\nHuman: ${input}` : input;
@@ -34,15 +39,14 @@ module.exports.run = async ({ event, args, api }) => {
         params: { message: prompt }
     });
 
-    const reply = res.data.content || res.data.response;
-    if (!reply) throw new Error("No response");
+    const replyText = res.data.content || res.data.response;
+    if (!replyText) throw new Error("No response");
 
-    // Save context
-    userHistory.push({ user: input, bot: reply });
+    userHistory.push({ user: input, bot: replyText });
     if (userHistory.length > 5) userHistory.shift();
     history.set(senderID, userHistory);
 
-    api.sendMessage(`💠 **Copilot**\n━━━━━━━━━━━━━━━━\n${reply}`, senderID);
+    api.sendMessage(`💠 **Copilot**\n━━━━━━━━━━━━━━━━\n${replyText}`, senderID);
 
   } catch (e) {
     api.sendMessage("❌ Copilot is unreachable.", senderID);
