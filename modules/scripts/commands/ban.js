@@ -1,4 +1,4 @@
-const fs = require("fs");
+const fs = require('fs').promises;
 const path = require("path");
 const bannedPath = path.join(__dirname, "banned.json");
 
@@ -16,7 +16,7 @@ module.exports.config = {
 
 module.exports.run = async function ({ event, args, reply }) {
   const senderID = event.sender.id;
-  const cmd = event.message.text.toLowerCase().split(" ")[0]; // get the first word
+  const cmd = event.message.text.toLowerCase().split(" ")[0];
 
   if (!global.ADMINS.has(senderID)) return reply("❌ restricted.");
 
@@ -26,14 +26,21 @@ module.exports.run = async function ({ event, args, reply }) {
     if (global.ADMINS.has(target)) return reply("❌ can't ban an admin.");
 
     global.BANNED_USERS.add(target);
-    fs.writeFileSync(bannedPath, JSON.stringify(Array.from(global.BANNED_USERS), null, 2));
+    
+    // Asynchronous write - prevents bot freeze
+    fs.writeFile(bannedPath, JSON.stringify([...global.BANNED_USERS], null, 2))
+       .catch(e => console.error("Failed to save bans:", e));
+       
     reply(`🚫 banned ${target}`);
 
   } else if (cmd === "unban") {
     const target = args[0];
     if (global.BANNED_USERS.has(target)) {
       global.BANNED_USERS.delete(target);
-      fs.writeFileSync(bannedPath, JSON.stringify(Array.from(global.BANNED_USERS), null, 2));
+      
+      fs.writeFile(bannedPath, JSON.stringify([...global.BANNED_USERS], null, 2))
+         .catch(e => console.error("Failed to save bans:", e));
+
       reply(`✅ unbanned ${target}`);
     }
   } else if (args[0] === "list") {
