@@ -1,4 +1,5 @@
 const utils = require("./modules/utils");
+const messageHandler = require("./page/main"); // FIX: Require once at top
 
 class SimpleLRU {
     constructor(limit) { this.limit = limit; this.cache = new Map(); }
@@ -32,6 +33,8 @@ module.exports.listen = (event) => {
         }
         if (ev.message?.is_echo) return;
         utils.log(ev);
-        setImmediate(() => require("./page/main")(ev));
+        
+        // FIX: Use the pre-loaded handler
+        setImmediate(() => messageHandler(ev));
     }));
 };
