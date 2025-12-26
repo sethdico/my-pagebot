@@ -1,4 +1,4 @@
-const { http, fetchWithRetry } = require("../../utils"); // FIXED: Destructured imports
+const { http, fetchWithRetry } = require("../../utils"); // FIXED: Destructured
 const fs = require("fs");
 const fsPromises = require("fs").promises;
 const path = require("path");
@@ -21,10 +21,7 @@ const getSafeFilename = (urlStr) => {
         let fileName = urlObj.searchParams.get("fileName") || path.basename(urlObj.pathname) || `file_${Date.now()}`;
         fileName = decodeURIComponent(fileName).replace(/[^a-zA-Z0-9._-]/g, "_");
         const ext = path.extname(fileName).toLowerCase();
-        if (!['.jpg', '.jpeg', '.png', '.gif', '.pdf', '.txt', '.mp4', '.mp3', '.zip'].includes(ext)) {
-            return `file_${Date.now()}.bin`; 
-        }
-        return fileName;
+        return ['.jpg', '.jpeg', '.png', '.gif', '.pdf', '.txt', '.mp4', '.mp3', '.zip'].includes(ext) ? fileName : `file_${Date.now()}.bin`;
     } catch (e) { return `file_${Date.now()}.bin`; }
 };
 
@@ -42,9 +39,9 @@ async function sendYouTubeThumbnail(youtubeUrl, senderID, api) {
 module.exports.config = {
   name: "ai",
   author: "Sethdico",
-  version: "16.9-Fixed",
+  version: "16.11-Fixed",
   category: "AI",
-  description: "chat, vision, youtube, and files.",
+  description: "Chat, Vision, YouTube, and Files.",
   adminOnly: false,
   usePrefix: false,
   cooldown: 0, 
@@ -54,24 +51,19 @@ module.exports.run = async function ({ event, args, api, reply }) {
   const senderID = event.sender.id;
   const userPrompt = args.join(" ").trim();
 
-  if (!CONFIG.API_KEY) return reply("❌ chipp_api_key missing on render.");
+  if (!CONFIG.API_KEY) return reply("❌ chipp_api_key missing.");
   
   const now = Date.now();
   const userTs = rateLimitStore.get(senderID) || [];
   const recentTs = userTs.filter(ts => now - ts < CONFIG.RATE_LIMIT.windowMs);
-  if (recentTs.length >= CONFIG.RATE_LIMIT.requests) return reply("⏳ too fast. slow down.");
+  if (recentTs.length >= CONFIG.RATE_LIMIT.requests) return reply("⏳ Slow down.");
   recentTs.push(now);
   rateLimitStore.set(senderID, recentTs);
 
-  if (sessions.size > 50) {
-      const oldestKey = sessions.keys().next().value;
-      sessions.delete(oldestKey);
-  }
+  if (sessions.size > 50) sessions.delete(sessions.keys().next().value);
 
   let imageUrl = "";
-  const isSticker = !!event.message?.sticker_id;
-  
-  if (event.message?.attachments?.[0]?.type === "image" && !isSticker) {
+  if (event.message?.attachments?.[0]?.type === "image") {
     imageUrl = event.message.attachments[0].payload.url;
   } else if (event.message?.reply_to?.attachments?.[0]?.type === "image") {
     imageUrl = event.message.reply_to.attachments[0].payload.url;
@@ -82,9 +74,9 @@ module.exports.run = async function ({ event, args, api, reply }) {
       return reply("🧹 cleared memory."); 
   }
   
-  if (isSticker && !userPrompt) return; 
-  if (imageUrl && !userPrompt) return reply("🖼️ i see the image. reply to the image with instructions");
-  if (!userPrompt && !imageUrl) return reply("👋 hi. i'm amdusbot. i can search, see images, and write files.");
+  if (!!event.message?.sticker_id && !userPrompt) return; 
+  if (imageUrl && !userPrompt) return reply("🖼️ what should i do with this image?");
+  if (!userPrompt && !imageUrl) return reply("👋 i'm amdusbot. ask me anything.");
 
   const youtubeRegex = /(?:youtube\.com\/watch\?v=|youtu\.be\/)([a-zA-Z0-9_-]{11})/;
   if (userPrompt && youtubeRegex.test(userPrompt)) await sendYouTubeThumbnail(userPrompt, senderID, api);
@@ -92,10 +84,9 @@ module.exports.run = async function ({ event, args, api, reply }) {
   if (api.sendTypingIndicator) api.sendTypingIndicator(true, senderID);
 
   try {
-    const identityPrompt = `[SYSTEM]: Amdusbot. You are helpful wise ai. Response limit 2000 chars. Made by Seth Asher Salinguhay.`;
+    const identityPrompt = `[SYSTEM]: Amdusbot. Helpful AI. Response limit 2000 chars. Created by Seth Asher Salinguhay.`;
     let sessionData = sessions.get(senderID) || { chatSessionId: null };
 
-    // FIXED: Correct use of fetchWithRetry and http.post
     const response = await fetchWithRetry(async () => {
         return http.post(CONFIG.API_URL, {
           model: CONFIG.MODEL_ID,
@@ -121,14 +112,12 @@ module.exports.run = async function ({ event, args, api, reply }) {
 
       const fileName = getSafeFilename(fileUrl);
       const isImage = [".jpg", ".jpeg", ".png", ".webp"].includes(path.extname(fileName));
+      const filePath = path.join(__dirname, "cache", fileName);
+      await fsPromises.mkdir(path.dirname(filePath), { recursive: true });
 
-      const cacheDir = path.join(__dirname, "cache");
-      await fsPromises.mkdir(cacheDir, { recursive: true }); 
-      const filePath = path.join(cacheDir, fileName);
-      
       const writer = fs.createWriteStream(filePath);
-      // FIXED: Correct axios stream call
-      const fileRes = await http({ url: fileUrl, method: 'GET', responseType: 'stream' });
+      // FIXED: Used http.get instead of http() function call
+      const fileRes = await http.get(fileUrl, { responseType: 'stream' });
       fileRes.data.pipe(writer);
 
       await new Promise((resolve, reject) => {
@@ -138,18 +127,17 @@ module.exports.run = async function ({ event, args, api, reply }) {
 
       const stats = await fsPromises.stat(filePath);
       if (stats.size > 25 * 1024 * 1024) {
-          await reply(`📂 too big to send. link: ${fileUrl}`);
+          await reply(`📂 too big. link: ${fileUrl}`);
       } else {
           await api.sendAttachment(isImage ? "image" : "file", filePath, senderID);
       }
-      
       setTimeout(() => fsPromises.unlink(filePath).catch(()=>{}), 10000);
     } else {
       await reply(replyContent);
     }
   } catch (error) {
-    console.error("AI Error:", error.response?.data || error.message);
-    reply("❌ ai glitch. check your api key or balance.");
+    console.error("AI Error:", error.message);
+    reply("❌ ai error. try again later.");
   } finally {
     if (api.sendTypingIndicator) api.sendTypingIndicator(false, senderID);
   }
