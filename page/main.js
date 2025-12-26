@@ -3,6 +3,7 @@ const http = utils.http;
 
 const graphUrl = (id) => `https://graph.facebook.com/v21.0/${id}/messages`;
 
+// Define API wrapper functions
 const api = {
     sendMessage: (text, id) => http.post(graphUrl(id), { messaging_type: "RESPONSE", message: { text } }, { params: { access_token: global.PAGE_ACCESS_TOKEN }}),
     sendButton: (text, buttons, id) => http.post(graphUrl(id), { messaging_type: "RESPONSE", message: { attachment: { type: "template", payload: { template_type: "button", text, buttons } } } }, { params: { access_token: global.PAGE_ACCESS_TOKEN }}),
@@ -14,10 +15,18 @@ const api = {
             text,
             quick_replies: quickReplies.map(q => ({ content_type: "text", title: q, payload: q }))
         }
-    }, { params: { access_token: global.PAGE_ACCESS_TOKEN }})
+    }, { params: { access_token: global.PAGE_ACCESS_TOKEN }}),
+    // Added helper for raw getUserInfo since it was used in commands
+    getUserInfo: async (id) => {
+        try {
+            const res = await http.get(`https://graph.facebook.com/${id}?fields=first_name,last_name,profile_pic&access_token=${global.PAGE_ACCESS_TOKEN}`);
+            return res.data;
+        } catch (e) { return { first_name: "User" }; }
+    }
 };
 
-module.exports = async (event) => {
+// Main Handler Function
+const handleEvent = async (event) => {
     const senderID = event.sender.id;
     if (!global.client.cooldowns.has(senderID)) global.client.cooldowns.set(senderID, new Map());
     
@@ -44,3 +53,7 @@ module.exports = async (event) => {
         } catch (e) { console.error("Cmd Error", e); api.sendMessage("❌ Error.", senderID); }
     }
 };
+
+// Export the handler AND the api object
+module.exports = handleEvent;
+module.exports.api = api;
