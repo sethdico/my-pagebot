@@ -1,39 +1,43 @@
-const fs = require("fs");
+const fs = require('fs').promises;
 const path = require("path");
 
 const REMINDERS_FILE = path.join(__dirname, "../../../reminders.json");
 const activeReminders = new Map();
 
-// Load reminders
-try {
-  if (fs.existsSync(REMINDERS_FILE)) {
-    const data = JSON.parse(fs.readFileSync(REMINDERS_FILE, "utf8"));
-    data.forEach(r => {
-      if (r.fireAt > Date.now()) {
-        activeReminders.set(r.id, r);
-        schedule(r);
-      }
-    });
-  }
-} catch (e) { console.log("⚠️ No reminders loaded."); }
+// Load reminders on startup
+const loadReminders = async () => {
+    try {
+        const data = await fs.readFile(REMINDERS_FILE, "utf8");
+        const list = JSON.parse(data);
+        list.forEach(r => {
+            if (r.fireAt > Date.now()) {
+                activeReminders.set(r.id, r);
+                schedule(r);
+            }
+        });
+    } catch (e) { /* File missing or empty is ok */ }
+};
 
-function save() {
-  fs.writeFileSync(REMINDERS_FILE, JSON.stringify(Array.from(activeReminders.values()), null, 2));
-}
+// Save reminders (Async)
+const saveReminders = async () => {
+    try {
+        await fs.writeFile(REMINDERS_FILE, JSON.stringify([...activeReminders.values()], null, 2));
+    } catch (e) { console.error("Error saving reminders:", e); }
+};
 
 function schedule(r) {
   const delay = r.fireAt - Date.now();
   if (delay <= 0) return;
-  
-  // OPTIMIZATION: Check for Integer Overflow (Max setTimeout is ~24 days)
   if (delay > 2147483647) return; 
 
-  setTimeout(() => {
-    // Uses global.api as fallback because this runs in the future
+  const timeoutId = setTimeout(async () => {
     if (global.api) global.api.sendMessage(`⏰ **REMINDER**\n"${r.message}"`, r.userId);
     activeReminders.delete(r.id);
-    save();
+    await saveReminders();
   }, delay);
+  
+  // Store the timeout ID so we could cancel it if we wanted to (optimization)
+  r.timeoutId = timeoutId; 
 }
 
 module.exports.config = {
@@ -53,7 +57,7 @@ module.exports.run = async ({ event, args, api }) => {
 
   // LIST
   if (args[0] === "list") {
-    const userList = Array.from(activeReminders.values()).filter(r => r.userId === senderID);
+    const userList = [...activeReminders.values()].filter(r => r.userId === senderID);
     if (!userList.length) return api.sendMessage("📝 No active reminders.", senderID);
     
     let msg = "📝 **YOUR LIST:**\n";
@@ -67,9 +71,12 @@ module.exports.run = async ({ event, args, api }) => {
   // CLEAR
   if (args[0] === "clear") {
     for (const [id, r] of activeReminders) {
-        if (r.userId === senderID) activeReminders.delete(id);
+        if (r.userId === senderID) {
+            clearTimeout(r.timeoutId); // Prevent ghost execution
+            activeReminders.delete(id);
+        }
     }
-    save();
+    await saveReminders();
     return api.sendMessage("✅ Cleared all your reminders.", senderID);
   }
 
@@ -81,14 +88,9 @@ module.exports.run = async ({ event, args, api }) => {
   const unit = match[2];
   const text = match[3];
 
-  let mult = 1000;
-  if (unit === "m") mult *= 60;
-  if (unit === "h") mult *= 3600;
-  if (unit === "d") mult *= 86400;
+  const multipliers = { s: 1000, m: 60000, h: 3600000, d: 86400000 };
+  const delay = val * multipliers[unit];
 
-  const delay = val * mult;
-  
-  // Safety cap to prevent server crash (approx 24 days)
   if (delay > 2000000000) return api.sendMessage("⚠️ Max reminder time is ~24 days.", senderID);
 
   const reminder = {
@@ -99,8 +101,11 @@ module.exports.run = async ({ event, args, api }) => {
   };
 
   activeReminders.set(reminder.id, reminder);
-  save();
+  await saveReminders();
   schedule(reminder);
 
   api.sendMessage(`✅ Reminder set for ${val}${unit}: "${text}"`, senderID);
 };
+
+// Initialize
+loadReminders();
