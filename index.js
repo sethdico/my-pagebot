@@ -11,6 +11,11 @@ const rateLimiter = require("./modules/rateLimiter");
 const app = express();
 const config = require("./config.json");
 
+// CRITICAL FIX FOR RENDER:
+// Tells Express to trust the Render Load Balancer so we get the real User IP.
+// Without this, the Rate Limiter bans the server instead of the spammer.
+app.set('trust proxy', 1); 
+
 global.PAGE_ACCESS_TOKEN = process.env.PAGE_ACCESS_TOKEN || config.PAGE_ACCESS_TOKEN;
 global.VERIFY_TOKEN = process.env.VERIFY_TOKEN || config.VERIFY_TOKEN;
 
@@ -89,7 +94,7 @@ const loadCommands = (dir) => {
     
     app.use(parser.json({ limit: '20mb' }));
     
-    // Fix: Add Rate Limiter to prevent spam attacks
+    // Apply Rate Limiter
     app.use(rateLimiter);
 
     app.get("/", (req, res) => {
