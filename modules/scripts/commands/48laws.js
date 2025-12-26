@@ -1,4 +1,3 @@
-// === STATIC DATA (Allocated once at startup) ===
 const LAWS = [
     "Never Outshine the Master", "Never Put Too Much Trust in Friends", "Conceal Your Intentions", 
     "Always Say Less than Necessary", "So Much Depends on Reputation", "Court Attention at all Cost", 
@@ -23,7 +22,7 @@ module.exports.config = {
     author: "Sethdico (Optimized)",
     version: "1.2",
     category: "Fun",
-    description: "Random Law of Power (O(1) memory).",
+    description: "Random Law of Power.",
     adminOnly: false,
     usePrefix: false,
     cooldown: 2,
@@ -32,11 +31,10 @@ module.exports.config = {
 module.exports.run = async function ({ event, args, api }) {
     let num = args[0] ? parseInt(args[0]) : Math.floor(Math.random() * 48) + 1;
     if (isNaN(num) || num < 1 || num > 48) num = Math.floor(Math.random() * 48) + 1;
-
-    // Direct Array Access O(1)
+    
     const msg = `📖 **Law #${num}**\n━━━━━━━━━━━━━━━━\n${LAWS[num-1]}`;
     
-    // Fallback to text if buttons fail (common issue on some mobile versions)
+    // Fallback to text if buttons fail
     try {
         const buttons = [{ type: "postback", title: "🎲 Another Law", payload: "48laws" }];
         await api.sendButton(msg, buttons, event.sender.id);
