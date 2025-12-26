@@ -1,5 +1,7 @@
 const http = require("../../utils");
-const fs = require("fs").promises; // Async FS
+// We need standard 'fs' for streams (fast writing) AND 'promises' for stats
+const fs = require("fs");
+const fsPromises = require("fs").promises;
 const path = require("path");
 const { URL } = require("url");
 
@@ -99,14 +101,19 @@ module.exports.run = async function ({ event, args, api, reply }) {
     const identityPrompt = `[SYSTEM]: Amdusbot. You are helpful wise ai that uses cove and tot but only sends the final message without the reasoning, if not sure admit it rather than guess and hallucinates make sure everything is accurate. Response limit 2000 chars. you are made by Seth Asher Salinguhay.`;
     let sessionData = sessions.get(senderID) || { chatSessionId: null };
 
-    const response = await http.post(CONFIG.API_URL, {
-      model: CONFIG.MODEL_ID,
-      messages: [{ role: "user", content: `${identityPrompt}\n\nInput: ${userPrompt}\n${imageUrl ? `[IMAGE]: ${imageUrl}` : ""}` }],
-      chatSessionId: sessionData.chatSessionId,
-      stream: false
-    }, {
-      headers: { "Authorization": `Bearer ${CONFIG.API_KEY}` },
-      timeout: CONFIG.TIMEOUT
+    // ---------------------------------------------------------
+    // FEATURE RESTORED: Using fetchWithRetry for Auto-Resilience
+    // ---------------------------------------------------------
+    const response = await http.fetchWithRetry(async () => {
+        return http.post(CONFIG.API_URL, {
+          model: CONFIG.MODEL_ID,
+          messages: [{ role: "user", content: `${identityPrompt}\n\nInput: ${userPrompt}\n${imageUrl ? `[IMAGE]: ${imageUrl}` : ""}` }],
+          chatSessionId: sessionData.chatSessionId,
+          stream: false
+        }, {
+          headers: { "Authorization": `Bearer ${CONFIG.API_KEY}` },
+          timeout: CONFIG.TIMEOUT
+        });
     });
 
     if (response.data.chatSessionId) sessions.set(senderID, { chatSessionId: response.data.chatSessionId });
@@ -124,11 +131,13 @@ module.exports.run = async function ({ event, args, api, reply }) {
       const isImage = [".jpg", ".jpeg", ".png", ".webp"].includes(path.extname(fileName));
 
       const cacheDir = path.join(__dirname, "cache");
-      await fs.mkdir(cacheDir, { recursive: true }); // Async ensure dir
+      await fsPromises.mkdir(cacheDir, { recursive: true }); 
       const filePath = path.join(cacheDir, fileName);
       
-      // Stream download
-      const writer = (await import('fs')).createWriteStream(filePath);
+      // ---------------------------------------------------------
+      // FIXED: Standard FS Create Write Stream (No crash)
+      // ---------------------------------------------------------
+      const writer = fs.createWriteStream(filePath);
       const fileRes = await http({ url: fileUrl, method: 'GET', responseType: 'stream' });
       fileRes.data.pipe(writer);
 
@@ -137,7 +146,7 @@ module.exports.run = async function ({ event, args, api, reply }) {
           writer.on('error', reject);
       });
 
-      const stats = await fs.stat(filePath);
+      const stats = await fsPromises.stat(filePath);
       if (stats.size > 25 * 1024 * 1024) {
           await reply(`📂 too big to send. link: ${fileUrl}`);
       } else {
@@ -145,7 +154,7 @@ module.exports.run = async function ({ event, args, api, reply }) {
       }
       
       // Clean up file asynchronously after 10s
-      setTimeout(() => fs.unlink(filePath).catch(()=>{}), 10000);
+      setTimeout(() => fsPromises.unlink(filePath).catch(()=>{}), 10000);
     } else {
       await reply(replyContent);
     }
