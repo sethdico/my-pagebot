@@ -10,20 +10,47 @@ const http = axios.create({
 });
 
 function getEventType(event) {
-    // figure out what kind of message this is
-    if (event.postback) return "postback";
-    if (event.message) {
-        if (event.message.attachments) return "attachment";
-        if (event.message.reply_to) return "reply";
-        return "text"; 
+    // 1. Check for Button Clicks (Postbacks)
+    // We treat these as text commands so the bot knows to read the payload
+    if (event.postback) {
+        // Create a fake message structure so commands can read .text easily
+        event.message = { text: event.postback.payload }; 
+        return "message";
     }
+
+    // 2. Check for Messages
+    if (event.message) {
+        // If it has attachments (images, files), it's an attachment event
+        if (event.message.attachments && event.message.attachments.length > 0) {
+            // But if it ALSO has text, it's a message WITH an image (like "ai describe this")
+            if (event.message.text) return "message";
+            return "attachment";
+        }
+        
+        // If it's a reply to another message
+        if (event.message.reply_to) return "reply";
+
+        // Standard text message
+        if (event.message.text) return "message";
+        
+        // Stickers or other non-text things
+        return "unknown";
+    }
+
     return "unknown";
 }
 
 function log(event) {
-    if (event.message?.is_echo) return;
-    const sender = global.ADMINS.has(event.sender?.id) ? "ADMIN" : "USER";
-    console.log(`[${sender}] Msg received`);
+    // Don't log the bot's own echoes or delivery receipts
+    if (event.message?.is_echo || event.delivery) return;
+
+    const senderId = event.sender?.id || "Unknown";
+    // Check if admin
+    const senderType = global.ADMINS.has(senderId) ? "ADMIN" : "USER";
+    
+    // Clean log output
+    const msgContent = event.message?.text || event.postback?.payload || "[Attachment/Media]";
+    console.log(`[${senderType}] (${senderId}): ${msgContent}`);
 }
 
 module.exports = { http, log, getEventType };
