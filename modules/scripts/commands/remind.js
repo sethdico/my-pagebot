@@ -4,7 +4,7 @@ const path = require("path");
 const REMINDERS_FILE = path.join(__dirname, "../../../reminders.json");
 const activeReminders = new Map();
 
-// Load reminders once at startup
+// Load reminders
 try {
   if (fs.existsSync(REMINDERS_FILE)) {
     const data = JSON.parse(fs.readFileSync(REMINDERS_FILE, "utf8"));
@@ -25,7 +25,11 @@ function schedule(r) {
   const delay = r.fireAt - Date.now();
   if (delay <= 0) return;
   
+  // OPTIMIZATION: Check for Integer Overflow (Max setTimeout is ~24 days)
+  if (delay > 2147483647) return; 
+
   setTimeout(() => {
+    // Uses global.api as fallback because this runs in the future
     if (global.api) global.api.sendMessage(`⏰ **REMINDER**\n"${r.message}"`, r.userId);
     activeReminders.delete(r.id);
     save();
@@ -35,7 +39,7 @@ function schedule(r) {
 module.exports.config = {
   name: "remind",
   author: "Sethdico",
-  version: "2.1-Optimized",
+  version: "2.1",
   category: "Utility",
   description: "Set a reminder.",
   adminOnly: false,
@@ -69,7 +73,7 @@ module.exports.run = async ({ event, args, api }) => {
     return api.sendMessage("✅ Cleared all your reminders.", senderID);
   }
 
-  // SET (e.g., "10m check oven")
+  // SET
   const match = input.match(/^(\d+)([smhd])\s+(.+)$/);
   if (!match) return api.sendMessage("⏰ Usage: remind 10m <message>\n(s=sec, m=min, h=hr)", senderID);
 
@@ -83,7 +87,9 @@ module.exports.run = async ({ event, args, api }) => {
   if (unit === "d") mult *= 86400;
 
   const delay = val * mult;
-  if (delay > 2592000000) return api.sendMessage("⚠️ Max 30 days.", senderID);
+  
+  // Safety cap to prevent server crash (approx 24 days)
+  if (delay > 2000000000) return api.sendMessage("⚠️ Max reminder time is ~24 days.", senderID);
 
   const reminder = {
     id: Date.now() + Math.random().toString(36).slice(2),
