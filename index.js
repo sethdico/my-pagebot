@@ -7,7 +7,7 @@ const fs = require("fs");
 const app = express();
 const config = require("./config.json");
 
-// Global Cache Setup
+// Configuration
 global.PAGE_ACCESS_TOKEN = process.env.PAGE_ACCESS_TOKEN || config.PAGE_ACCESS_TOKEN;
 global.ADMINS = new Set(process.env.ADMINS?.split(",") || config.ADMINS || []);
 global.PREFIX = process.env.PREFIX || config.PREFIX || ".";
@@ -15,16 +15,16 @@ global.PREFIX = process.env.PREFIX || config.PREFIX || ".";
 const cacheDir = path.join(__dirname, "modules/scripts/commands/cache");
 const bannedPath = path.join(__dirname, "modules/scripts/commands/banned.json");
 
-// clear cache on start
+// Startup: Clear cache
 if (!fs.existsSync(cacheDir)) {
     fs.mkdirSync(cacheDir, { recursive: true });
 } else {
-    fs.readdirSync(cacheDir).forEach(file => {
-        try { fs.unlinkSync(path.join(cacheDir, file)); } catch(e) {}
-    });
+    try {
+        fs.readdirSync(cacheDir).forEach(file => fs.unlinkSync(path.join(cacheDir, file)));
+    } catch(e) {}
 }
 
-// load bans
+// Startup: Load Bans
 global.BANNED_USERS = new Set();
 try {
     if (fs.existsSync(bannedPath)) {
@@ -35,7 +35,7 @@ try {
     if (!fs.existsSync(bannedPath)) fs.writeFileSync(bannedPath, "[]");
 }
 
-// recursive command loader
+// Command Loader
 global.client = { commands: new Map(), aliases: new Map(), cooldowns: new Map() };
 
 const loadCommands = (dir) => {
@@ -51,15 +51,15 @@ const loadCommands = (dir) => {
                     global.client.commands.set(name, cmd);
                     if (cmd.config.aliases) cmd.config.aliases.forEach(a => global.client.aliases.set(a.toLowerCase(), name));
                 }
-            } catch (e) { console.error(`❌ Load Error: ${file}`); }
+            } catch (e) { console.error(`[Load Error] ${file}: ${e.message}`); }
         }
     });
 };
 loadCommands(path.join(__dirname, "modules/scripts/commands"));
 
-app.use(parser.json({ limit: '10mb' }));
+app.use(parser.json({ limit: '20mb' }));
 
-app.get("/", (req, res) => res.send(`<h1>${config.BOTNAME} is Active</h1>`));
+app.get("/", (req, res) => res.send(`🟢 Amduspage is Online`));
 
 app.get("/webhook", (req, res) => {
     const vToken = process.env.VERIFY_TOKEN || config.VERIFY_TOKEN;
@@ -72,12 +72,16 @@ app.post("/webhook", (req, res) => {
     res.sendStatus(200);
 });
 
-// notifies admin for crash
-app.use(async (err, req, res, next) => {
+// SAFETY FIX: Prevent infinite loops during crashes
+process.on('unhandledRejection', (reason, p) => {
+    console.error('Unhandled Rejection at:', p, 'reason:', reason);
+});
+
+// Standard error handler
+app.use((err, req, res, next) => {
     console.error(err.stack);
-    if (global.api) global.ADMINS.forEach(id => global.api.sendMessage(`⚠️ crash: ${err.message}`, id).catch(() => {}));
-    res.status(500).send("internal error");
+    res.status(500).send("Server Error");
 });
 
 const PORT = process.env.PORT || 8080;
-app.listen(PORT, () => console.log(`amdusbot active on ${PORT}`));
+app.listen(PORT, () => console.log(`Server active on port ${PORT}`));
