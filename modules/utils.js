@@ -9,8 +9,17 @@ const http = axios.create({
 
 const parseAI = (res) => {
     if (!res || !res.data) return null;
-    let d = res.data;
+    const d = res.data;
+
+    // 1. CHIPP.AI / OPENAI FORMAT (The core fix)
+    if (d.choices?.[0]?.message?.content) return d.choices[0].message.content;
+    
+    // 2. Error Reporting (Tells you if your key/plan is the problem)
+    if (d.error) return `⚠️ API Error: ${d.error.message || d.error}`;
+
+    // 3. Fallback for other community APIs
     let text = d.answer || d.response || d.result || d.message || d.content || (typeof d === 'string' ? d : null);
+    
     if (typeof text === 'string' && text.includes("output_done")) {
         const match = text.match(/"text":"(.*?)"/);
         if (match) text = match[1].replace(/\\n/g, '\n');
@@ -21,8 +30,7 @@ const parseAI = (res) => {
 function log(event) {
     if (event.message?.is_echo || !event.sender) return;
     const senderType = global.ADMINS?.has(event.sender.id) ? "ADMIN" : "USER";
-    const msg = event.message?.text || event.postback?.payload || "[Media]";
-    console.log(`[${senderType}] ${event.sender.id}: ${msg}`);
+    console.log(`[${senderType}] ${event.sender.id}: ${event.message?.text || "Media"}`);
 }
 
 function getEventType(event) {
