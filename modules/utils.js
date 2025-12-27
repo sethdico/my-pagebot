@@ -1,32 +1,30 @@
 const axios = require("axios");
 const https = require("https");
 
-// 1. The HTTP Tool
 const http = axios.create({
     timeout: 60000, 
-    httpsAgent: new https.Agent({ 
-        keepAlive: true,
-        rejectUnauthorized: false 
-    }),
+    httpsAgent: new https.Agent({ keepAlive: true, rejectUnauthorized: false }),
     headers: { 'User-Agent': 'Amduspage/Bot' }
 });
 
-// 2. The "Undefined" Killer
+// FIXED: Master parser to find the answer in any API response
 const parseAI = (res) => {
     if (!res || !res.data) return null;
     const d = res.data;
-    return d.answer || d.response || d.result || d.message || d.content || (typeof d === 'string' ? d : null);
+    const text = d.answer || d.response || d.result || d.message || d.content || (typeof d === 'string' ? d : null);
+    if (typeof text === 'string' && text.includes("output_done")) {
+        const match = text.match(/"text":"(.*?)"/);
+        if (match) return match[1].replace(/\\n/g, '\n');
+    }
+    return text;
 };
 
-// 3. The Logging Function (RESTORED TO FIX CRASH)
 function log(event) {
     if (event.message?.is_echo || !event.sender) return;
     const senderType = global.ADMINS?.has(event.sender.id) ? "ADMIN" : "USER";
-    const msg = event.message?.text || event.postback?.payload || "[Media/Attachment]";
-    console.log(`[${senderType}] ${event.sender.id}: ${msg}`);
+    console.log(`[${senderType}] ${event.sender.id}: ${event.message?.text || "Media"}`);
 }
 
-// 4. Event Type Detector
 function getEventType(event) {
     if (event.postback) return "postback";
     if (event.message) {
@@ -37,7 +35,6 @@ function getEventType(event) {
     return "unknown";
 }
 
-// 5. Retry logic for unstable APIs
 async function fetchWithRetry(requestFn, retries = 3) {
     for (let i = 0; i < retries; i++) {
         try { return await requestFn(); } 
@@ -48,5 +45,4 @@ async function fetchWithRetry(requestFn, retries = 3) {
     }
 }
 
-// Ensure all these are exported so webhook.js and commands can see them
 module.exports = { http, parseAI, log, getEventType, fetchWithRetry };
