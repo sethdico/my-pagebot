@@ -1,45 +1,31 @@
 const { http } = require("../../utils");
-const history = new Map();
 
 module.exports.config = {
   name: "copilot",
   author: "Sethdico",
-  version: "4.8",
+  version: "4.9",
   category: "AI",
-  description: "Microsoft Copilot AI.",
+  description: "Microsoft Copilot.",
   adminOnly: false,
   usePrefix: false,
   cooldown: 5,
 };
 
-module.exports.run = async ({ event, args, api, reply }) => {
-  const senderID = event.sender.id;
-  const input = args.join(" ").trim();
-
+module.exports.run = async function ({ event, args, api, reply }) {
+  const input = args.join(" ");
   if (!input) return reply("💠 Usage: copilot <text>");
-  if (api.sendTypingIndicator) api.sendTypingIndicator(true, senderID);
+
+  if (api.sendTypingIndicator) api.sendTypingIndicator(true, event.sender.id);
 
   try {
-    let userHistory = history.get(senderID) || [];
-    const context = userHistory.slice(-3).map(h => `Human: ${h.user}\nBot: ${h.bot}`).join("\n");
-    const prompt = context ? `${context}\nHuman: ${input}` : input;
-
     const res = await http.get("https://shin-apis.onrender.com/ai/copilot", {
-        params: { message: prompt }
+        params: { message: input } 
     });
-
-    const result = res.data.content || res.data.response || res.data.result || res.data.message;
-
-    if (!result) throw new Error("Empty Response");
-
-    userHistory.push({ user: input, bot: result });
-    if (userHistory.length > 5) userHistory.shift();
-    history.set(senderID, userHistory);
-
-    api.sendMessage(`💠 **COPILOT**\n━━━━━━━━━━━━━━━━\n${result}`, senderID);
+    const result = res.data.content || res.data.response || res.data.result;
+    api.sendMessage(`💠 **COPILOT**\n━━━━━━━━━━━━━━━━\n${result || "Empty response."}`, event.sender.id);
   } catch (e) {
     reply("❌ Copilot is unreachable.");
   } finally {
-    if (api.sendTypingIndicator) api.sendTypingIndicator(false, senderID);
+    if (api.sendTypingIndicator) api.sendTypingIndicator(false, event.sender.id);
   }
 };
