@@ -7,14 +7,13 @@ const http = axios.create({
     headers: { 'User-Agent': 'Amduspage/Bot' }
 });
 
-// FIXED: Master parser to find the answer in any API response
 const parseAI = (res) => {
     if (!res || !res.data) return null;
-    const d = res.data;
-    const text = d.answer || d.response || d.result || d.message || d.content || (typeof d === 'string' ? d : null);
+    let d = res.data;
+    let text = d.answer || d.response || d.result || d.message || d.content || (typeof d === 'string' ? d : null);
     if (typeof text === 'string' && text.includes("output_done")) {
         const match = text.match(/"text":"(.*?)"/);
-        if (match) return match[1].replace(/\\n/g, '\n');
+        if (match) text = match[1].replace(/\\n/g, '\n');
     }
     return text;
 };
@@ -22,7 +21,8 @@ const parseAI = (res) => {
 function log(event) {
     if (event.message?.is_echo || !event.sender) return;
     const senderType = global.ADMINS?.has(event.sender.id) ? "ADMIN" : "USER";
-    console.log(`[${senderType}] ${event.sender.id}: ${event.message?.text || "Media"}`);
+    const msg = event.message?.text || event.postback?.payload || "[Media]";
+    console.log(`[${senderType}] ${event.sender.id}: ${msg}`);
 }
 
 function getEventType(event) {
