@@ -1,14 +1,7 @@
-const { http } = require("../../utils");
+const { http, parseAI } = require("../../utils");
 
 module.exports.config = { 
-    name: "webpilot", 
-    author: "Sethdico",
-    version: "1.3",
-    category: "AI", 
-    description: "WebPilot Search AI",
-    adminOnly: false,
-    usePrefix: false,
-    cooldown: 5 
+    name: "webpilot", author: "Sethdico", version: "6.0", category: "AI", description: "Search the web.", adminOnly: false, usePrefix: false, cooldown: 5 
 };
 
 module.exports.run = async function ({ event, args, api, reply }) {
@@ -19,11 +12,8 @@ module.exports.run = async function ({ event, args, api, reply }) {
         const res = await http.get("https://shin-apis.onrender.com/ai/webcopilot", { 
             params: { question: input } 
         });
-        
-        // FIXED: prioritized res.data.answer
-        const result = res.data.answer || res.data.response || res.data.content;
-        
-        api.sendMessage(`🌐 **WEBPILOT**\n━━━━━━━━━━━━━━━━\n${result}`, event.sender.id);
+        const result = parseAI(res);
+        api.sendMessage(`🌐 **WEBPILOT**\n━━━━━━━━━━━━━━━━\n${result || "No response."}`, event.sender.id);
     } catch (e) {
         reply("❌ Webpilot search failed.");
     }
