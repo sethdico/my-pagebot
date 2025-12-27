@@ -1,74 +1,51 @@
-const http = require("../../utils");
-
-const ariaHistory = new Map();
+const { http } = require("../../utils");
+const history = new Map();
 
 module.exports.config = {
   name: "aria",
   author: "Sethdico",
-  version: "5.1-Fast",
+  version: "5.3",
   category: "AI",
-  description: "Aria AI that remembers what you said.",
+  description: "Aria AI.",
   adminOnly: false,
   usePrefix: false,
   cooldown: 5,
 };
 
-module.exports.run = async ({ event, args, api }) => {
+module.exports.run = async ({ event, args, api, reply }) => {
   const senderID = event.sender.id;
   const input = args.join(" ").trim();
 
-  // Reset command
-  if (input.toLowerCase() === "clear" || input.toLowerCase() === "reset") {
-    ariaHistory.delete(senderID);
-    return api.sendMessage("🧹 Aria's memory wiped.", senderID);
+  if (input.toLowerCase() === "clear") {
+    history.delete(senderID);
+    return reply("🧹 Aria's memory wiped.");
   }
 
-  if (!input) return api.sendMessage("🤖 Usage: aria <message>", senderID);
-
-  if (api.sendTypingIndicator) await api.sendTypingIndicator(true, senderID).catch(()=>{});
+  if (!input) return reply("🤖 Usage: aria <message>");
+  if (api.sendTypingIndicator) api.sendTypingIndicator(true, senderID);
 
   try {
-    let history = ariaHistory.get(senderID) || [];
-    
-    // Format last 3 messages for context
-    const contextString = history
-        .slice(-3) 
-        .map(entry => `User: ${entry.user}\nAria: ${entry.bot}`)
-        .join("\n");
-
-    const finalPrompt = contextString 
-        ? `[Previous]:\n${contextString}\n\n[Current]:\n${input}`
-        : input;
+    let userHistory = history.get(senderID) || [];
+    const context = userHistory.slice(-3).map(h => `User: ${h.user}\nBot: ${h.bot}`).join("\n");
+    const prompt = context ? `${context}\nUser: ${input}` : input;
 
     const res = await http.get("https://betadash-api-swordslush-production.up.railway.app/Aria", {
-      params: { 
-          ask: finalPrompt, 
-          userid: senderID 
-      }
+      params: { ask: prompt, userid: senderID }
     });
 
-    const answer = res.data.response || res.data.result || res.data.content;
-    if (!answer) throw new Error("Empty API response");
+    // The Parser: Checks every key including 'result' which Aria often uses
+    const answer = res.data.response || res.data.result || res.data.message || res.data.content || res.data.data?.answer;
 
-    // Save to memory
-    history.push({ user: input, bot: answer });
-    if (history.length > 6) history.shift(); 
-    ariaHistory.set(senderID, history);
+    if (!answer) throw new Error("Blank Response");
 
-    // OPTIMIZATION: Cleanup Map if it gets too big (Prevent Memory Leak)
-    if (ariaHistory.size > 100) {
-        const keys = [...ariaHistory.keys()];
-        // Delete oldest 20 entries
-        for(let i=0; i<20; i++) ariaHistory.delete(keys[i]);
-    }
+    userHistory.push({ user: input, bot: answer });
+    if (userHistory.length > 5) userHistory.shift();
+    history.set(senderID, userHistory);
 
-    const msg = `🤖 **Aria**\n━━━━━━━━━━━━━━━━\n${answer}`;
-    await api.sendMessage(msg, senderID);
-
+    api.sendMessage(`🤖 **ARIA**\n━━━━━━━━━━━━━━━━\n${answer}`, senderID);
   } catch (e) {
-    console.error("Aria Error:", e.message);
-    api.sendMessage("❌ Aria is napping right now.", senderID);
+    reply("❌ Aria is currently napping.");
   } finally {
-    if (api.sendTypingIndicator) api.sendTypingIndicator(false, senderID).catch(()=>{});
+    if (api.sendTypingIndicator) api.sendTypingIndicator(false, senderID);
   }
 };
