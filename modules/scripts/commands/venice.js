@@ -19,7 +19,10 @@ module.exports.run = async function ({ event, args, api, reply }) {
         const res = await http.get("https://shin-apis.onrender.com/ai/venice", { 
             params: { question: input } 
         });
-        const result = res.data.response || res.data.result;
+        
+        // FIXED: prioritized res.data.answer
+        const result = res.data.answer || res.data.response || res.data.result;
+        
         api.sendMessage(`🎭 **VENICE**\n━━━━━━━━━━━━━━━━\n${result}`, event.sender.id);
     } catch (e) {
         reply("❌ Venice is silent.");
