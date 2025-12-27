@@ -2,8 +2,11 @@ const axios = require("axios");
 const https = require("https");
 
 const http = axios.create({
-    timeout: 20000,
-    httpsAgent: new https.Agent({ keepAlive: true }),
+    timeout: 60000, 
+    httpsAgent: new https.Agent({ 
+        keepAlive: true,
+        rejectUnauthorized: false 
+    }),
     headers: { 'User-Agent': 'Amduspage/Bot' }
 });
 
@@ -18,17 +21,11 @@ async function fetchWithRetry(requestFn, retries = 3) {
 }
 
 function getEventType(event) {
-    if (event.postback) {
-        event.message = { text: event.postback.payload }; 
-        return "message";
-    }
+    if (event.postback) return "postback";
     if (event.message) {
-        if (event.message.attachments && event.message.attachments.length > 0) {
-            if (event.message.text) return "message";
-            return "attachment";
-        }
+        if (event.message.attachments) return "attachment";
         if (event.message.reply_to) return "reply";
-        if (event.message.text) return "message";
+        return "text"; 
     }
     return "unknown";
 }
