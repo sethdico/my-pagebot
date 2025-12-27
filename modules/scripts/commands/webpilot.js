@@ -1,11 +1,26 @@
 const { http } = require("../../utils");
-module.exports.config = { name: "webpilot", category: "AI", cooldown: 5 };
-module.exports.run = async ({ event, args, api }) => {
-    if (!args[0]) return api.sendMessage("🌐 Usage: webpilot <search>", event.sender.id);
+
+module.exports.config = { 
+    name: "webpilot", 
+    category: "AI", 
+    cooldown: 5 
+};
+
+module.exports.run = async ({ event, args, api, reply }) => {
+    const query = args.join(" ");
+    if (!query) return reply("🌐 Usage: webpilot <search>");
+    
     try {
         const res = await http.get("https://betadash-api-swordslush-production.up.railway.app/webpilot", { 
-            params: { search: args.join(" ") } 
+            params: { search: query } 
         });
-        api.sendMessage(`🌐 **WebPilot**\n${res.data.response}`, event.sender.id);
-    } catch (e) { api.sendMessage("❌ Webpilot error.", event.sender.id); }
+
+        const result = res.data.response || res.data.result || res.data.message || res.data.content;
+
+        if (!result) throw new Error("Empty Response");
+
+        api.sendMessage(`🌐 **WEBPILOT**\n━━━━━━━━━━━━━━━━\n${result}`, event.sender.id);
+    } catch (e) { 
+        reply("❌ Webpilot error."); 
+    }
 };
