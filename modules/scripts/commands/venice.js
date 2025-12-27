@@ -3,9 +3,9 @@ const { http } = require("../../utils");
 module.exports.config = { 
     name: "venice", 
     author: "Sethdico",
-    version: "1.1",
+    version: "1.2",
     category: "AI", 
-    description: "Venice AI assistant.",
+    description: "Venice AI assistant",
     adminOnly: false,
     usePrefix: false,
     cooldown: 5 
@@ -19,8 +19,8 @@ module.exports.run = async function ({ event, args, api, reply }) {
         const res = await http.get("https://shin-apis.onrender.com/ai/venice", { 
             params: { question: input } 
         });
-        const result = res.data.response || res.data.result || res.data.message;
-        api.sendMessage(`🎭 **VENICE**\n━━━━━━━━━━━━━━━━\n${result || "Empty response."}`, event.sender.id);
+        const result = res.data.response || res.data.result;
+        api.sendMessage(`🎭 **VENICE**\n━━━━━━━━━━━━━━━━\n${result}`, event.sender.id);
     } catch (e) {
         reply("❌ Venice is silent.");
     }
