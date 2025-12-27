@@ -5,25 +5,25 @@ module.exports = async function (event, api) {
     const senderID = event.sender.id;
     const reply = (msg) => api.sendMessage(msg, senderID);
 
-    // 1. Welcome Player
+    // 1. Setup
     if (event.postback?.payload === "GET_STARTED_PAYLOAD") {
         const info = await api.getUserInfo(senderID);
         return reply(`👋 Hi ${info.first_name || "there"}! Type 'help' to start.`);
     }
 
-    // 2. Anti-Spam
-    const now = Date.now();
-    let userData = spamMap.get(senderID) || { count: 0, time: 0 };
-    if (now - userData.time > 5000) { userData.count = 0; userData.time = now; }
+    // 2. Anti-Spam (10 messages per 5s)
+    let userData = spamMap.get(senderID) || { count: 0, time: Date.now() };
+    if (Date.now() - userData.time > 5000) { userData.count = 0; userData.time = Date.now(); }
     userData.count++;
     spamMap.set(senderID, userData);
     if (userData.count > 10) return; 
 
+    if (event.message?.is_echo) return;
     const body = event.message?.text || event.postback?.payload || "";
     if (!body && !event.message?.attachments) return;
 
-    // 3. Command recognition
-    const prefix = global.PREFIX || ".";
+    // 3. Command Identification
+    const prefix = global.PREFIX;
     const isPrefixed = body.startsWith(prefix);
     const input = isPrefixed ? body.slice(prefix.length).trim() : body.trim();
     const args = input.split(/\s+/);
@@ -37,11 +37,11 @@ module.exports = async function (event, api) {
         try {
             await command.run({ event, args, api, reply });
         } catch (e) {
-            console.error(`Cmd Error [${cmdName}]:`, e);
-            reply("❌ Command logic error.");
+            console.error(`Error in ${cmdName}:`, e.message);
+            reply("❌ Error executing command.");
         }
     } else if (body.length > 0 && !event.message?.is_echo) {
-        // 4. AI Fallback
+        // AI Fallback (Normal talking)
         const ai = global.client.commands.get("ai");
         if (ai) await ai.run({ event, args: body.trim().split(/\s+/), api, reply });
     }
