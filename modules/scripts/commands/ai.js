@@ -37,19 +37,13 @@ module.exports.run = async function ({ event, args, api, reply }) {
   const repliedImg = event.message?.reply_to?.attachments?.find(a => a.type === "image")?.payload?.url;
   const imageUrl = currentImg || repliedImg || "";
 
-  // DEBUG: Log what we're receiving
-  console.log("🔍 AI Debug - Current attachments:", event.message?.attachments);
-  console.log("🔍 AI Debug - Reply attachments:", event.message?.reply_to?.attachments);
-  console.log("🔍 AI Debug - Image URL found:", imageUrl);
-
-  // If user sends JUST an image (no text), prompt them to reply with instructions
+  // If user sends JUST an image (no text), prompt them
   if (currentImg && !userPrompt) {
-    return reply("🖼️ I see your image! Reply to it with your instructions.\n\nExamples:\n• 'describe this'\n• 'what's in this image?'\n• 'identify the object'");
+    return reply("🖼️ I see your image! Reply to it with instructions like 'describe this'");
   }
   
-  // If replying to an image but forgot to add text
   if (repliedImg && !userPrompt) {
-    return reply("📝 Please add your instruction! Tell me what you want to know about the image.");
+    return reply("📝 Please add your instruction!");
   }
   
   if (!userPrompt && !imageUrl) {
@@ -61,25 +55,14 @@ module.exports.run = async function ({ event, args, api, reply }) {
   }
 
   try {
-    const identityPrompt = `[SYSTEM]: You are Amdusbot, a helpful and wise AI assistant created by Seth Asher Salinguhay. You use chain-of-thought reasoning (CoT) and tree-of-thoughts (ToT) internally but only send the final answer without showing the reasoning process. If you're not sure about something, admit it rather than guess or hallucinate. Ensure everything is accurate. Response limit: 2000 characters.`;
+    const identityPrompt = `[SYSTEM]: You are Amdusbot, a helpful and wise AI assistant created by Seth Asher Salinguhay. Use chain-of-thought reasoning but only send the final answer. Response limit: 2000 characters.`;
     
     let sessionData = global.sessions.get(senderID) || { chatSessionId: null };
 
     const response = await fetchWithRetry(async () => {
-        // FIXED: Build the message properly based on what's available
         let userMessage = "";
-        
-        // Add image reference if present
-        if (imageUrl) {
-          userMessage += `[Image URL: ${imageUrl}]\n\n`;
-        }
-        
-        // Add user's text input
-        if (userPrompt) {
-          userMessage += userPrompt;
-        } else if (imageUrl) {
-          userMessage += "Describe this image in detail.";
-        }
+        if (imageUrl) userMessage += `[Image URL: ${imageUrl}]\n\n`;
+        userMessage += userPrompt || "Describe this image in detail.";
 
         return http.post("https://app.chipp.ai/api/v1/chat/completions", {
           model: "newapplication-10035084",
@@ -134,7 +117,14 @@ module.exports.run = async function ({ event, args, api, reply }) {
     }
     
   } catch (error) {
-    console.error("AI Error:", error.message);
-    reply("❌ AI glitch.");
+    global.log.error("ai error:", error.message);
+    
+    if (error.code === 'ECONNABORTED') {
+      reply("request timed out, try again");
+    } else if (error.response?.status === 429) {
+      reply("too many requests rn, wait a sec");
+    } else {
+      reply("something went wrong on my end");
+    }
   }
 };
