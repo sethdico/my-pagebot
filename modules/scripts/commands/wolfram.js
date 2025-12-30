@@ -1,7 +1,7 @@
 const { http, parseAI } = require("../../utils");
 
 module.exports.config = {
-    name: "wolfram", author: "Sethdico", version: "6.0", category: "Utility", description: "Wolfram with Lite buttons.", adminOnly: false, usePrefix: false, cooldown: 5,
+    name: "wolfram", author: "Sethdico", version: "6.0", category: "Utility", description: "Wolframalpha solves math / science.", adminOnly: false, usePrefix: false, cooldown: 5,
 };
 
 module.exports.run = async function ({ event, args, api, reply }) {
