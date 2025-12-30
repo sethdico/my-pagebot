@@ -27,9 +27,9 @@ async function sendYouTubeThumbnail(youtubeUrl, senderID, api) {
 module.exports.config = {
   name: "ai",
   author: "Sethdico",
-  version: "16.30-Flow",
+  version: "16.30",
   category: "AI",
-  description: "Advanced AI with Image Reply Flow.",
+  description: "Advanced AI with image recognition/edit, real-time info, youtube videos and file generation.",
   adminOnly: false,
   usePrefix: false,
   cooldown: 0, 
