@@ -1,31 +1,22 @@
 const axios = require("axios");
 const https = require("https");
 
-// 1. The HTTP Tool (Optimized for slow APIs)
 const http = axios.create({
     timeout: 60000, 
-    httpsAgent: new https.Agent({ 
-        keepAlive: true, 
-        rejectUnauthorized: false 
-    }),
+    httpsAgent: new https.Agent({ keepAlive: true, rejectUnauthorized: false }),
     headers: { 'User-Agent': 'Amduspage/Bot' }
 });
 
-// 2. The Master Parser (The fix for Chipp.ai and "undefined" errors)
 const parseAI = (res) => {
     if (!res || !res.data) return null;
     const d = res.data;
-
-    // Chipp.ai / OpenAI deep JSON path
+    // OpenAI/Chipp Format
     if (d.choices?.[0]?.message?.content) return d.choices[0].message.content;
-    
-    // API Error Reporting
+    // Error reporting
     if (d.error) return `⚠️ API Error: ${d.error.message || d.error}`;
-
-    // Standard community API keys
+    // Community keys
     let text = d.answer || d.response || d.result || d.message || d.content || (typeof d === 'string' ? d : null);
-    
-    // Clean SSE "output_done" junk (Quillbot fix)
+    // SSE Cleanup
     if (typeof text === 'string' && text.includes("output_done")) {
         const match = text.match(/"text":"(.*?)"/);
         if (match) text = match[1].replace(/\\n/g, '\n');
@@ -33,15 +24,21 @@ const parseAI = (res) => {
     return text;
 };
 
-// 3. The Logging Function (FIXED: Restored to stop the crash)
+const sleep = (ms) => new Promise(res => setTimeout(res, ms));
+
+const humanTyping = async (api, id, text) => {
+    if (!api.sendTypingIndicator) return;
+    await api.sendTypingIndicator(true, id);
+    const delay = Math.min((text || "").length * 10, 2000);
+    await sleep(delay);
+};
+
 function log(event) {
     if (event.message?.is_echo || !event.sender) return;
     const senderType = global.ADMINS?.has(event.sender.id) ? "ADMIN" : "USER";
-    const msg = event.message?.text || event.postback?.payload || "[Media/Attachment]";
-    console.log(`[${senderType}] ${event.sender.id}: ${msg}`);
+    console.log(`[${senderType}] ${event.sender.id}: ${event.message?.text || "Media"}`);
 }
 
-// 4. Event Type Detector
 function getEventType(event) {
     if (event.postback) return "postback";
     if (event.message) {
@@ -52,17 +49,13 @@ function getEventType(event) {
     return "unknown";
 }
 
-// 5. Retry logic for unstable APIs
 async function fetchWithRetry(requestFn, retries = 3) {
     for (let i = 0; i < retries; i++) {
-        try { return await requestFn(); } 
-        catch (error) {
+        try { return await requestFn(); } catch (error) {
             if (i === retries - 1) throw error;
-            // Exponential backoff
-            await new Promise(r => setTimeout(r, Math.pow(2, i) * 1000));
+            await sleep(Math.pow(2, i) * 1000);
         }
     }
 }
 
-// Ensure all these are exported so index.js and commands can see them
-module.exports = { http, parseAI, log, getEventType, fetchWithRetry };
+module.exports = { http, parseAI, log, getEventType, fetchWithRetry, humanTyping };
