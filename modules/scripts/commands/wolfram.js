@@ -1,54 +1,28 @@
-const { http } = require("../../utils");
+const { http, parseAI } = require("../../utils");
 
 module.exports.config = {
-    name: "wolfram",
-    author: "Sethdico",
-    version: "5.0",
-    category: "Utility",
-    description: "Solve math/science with cross-search.",
-    adminOnly: false,
-    usePrefix: false,
-    cooldown: 5,
+    name: "wolfram", author: "Sethdico", version: "6.0", category: "Utility", description: "Wolfram with Lite buttons.", adminOnly: false, usePrefix: false, cooldown: 5,
 };
 
 module.exports.run = async function ({ event, args, api, reply }) {
     const input = args.join(" ");
-    const id = event.sender.id;
-
     if (!input) return reply("🧮 Usage: wolfram <query>");
-    
-    api.sendTypingIndicator(true, id);
 
     try {
         const response = await http.get(`https://api.wolframalpha.com/v2/query`, {
-            params: {
-                appid: process.env.WOLFRAM_APP_ID,
-                input: input,
-                output: "json",
-                format: "plaintext,image",
-            }
+            params: { appid: process.env.WOLFRAM_APP_ID, input: input, output: "json" }
         });
 
-        const res = response.data.queryresult;
-        if (!res.success) return reply("❌ Wolfram couldn't solve that.");
-
-        let resultText = "";
-        let pods = res.pods || [];
+        const result = parseAI(response);
+        const msg = `🧮 **RESULT:**\n${result || "Check details."}`;
         
-        for (const pod of pods.slice(0, 3)) {
-            resultText += `📍 **${pod.title}**\n${pod.subpods[0].plaintext}\n\n`;
-        }
+        const buttons = [
+            { type: "postback", title: "🔍 Google", payload: `google ${input}` },
+            { type: "postback", title: "📚 Wiki", payload: `wiki ${input}` }
+        ];
 
-        const msg = `🧮 **WOLFRAM RESULT**\n━━━━━━━━━━━━━━━━\n${resultText.trim()}`;
-        await api.sendMessage(msg, id);
-
-        // Flow: Offer to search the same thing elsewhere if it's too complex
-        const flows = ["Wiki", "Google", "Help"];
-        return api.sendQuickReply("💡 Still confused? Try searching here:", flows, id);
-
+        return api.sendButton(msg, buttons, event.sender.id);
     } catch (e) {
-        reply("❌ Wolfram is currently unavailable.");
-    } finally {
-        api.sendTypingIndicator(false, id);
+        reply("❌ Wolfram unavailable.");
     }
 };
