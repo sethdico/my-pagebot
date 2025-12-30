@@ -1,29 +1,18 @@
 const { http } = require("../../utils");
 
-const BACKUP = [
-  { s: "Why do Java devs wear glasses?", p: "Because they don't C#." },
-  { s: "I used to play piano by ear.", p: "But now I use my hands." }
-];
-
 module.exports.config = {
-  name: "joke",
-  author: "Sethdico",
-  version: "3.0-Fast",
-  category: "Fun",
-  description: "Random jokes.",
-  adminOnly: false,
-  usePrefix: false,
-  cooldown: 2,
+  name: "joke", author: "Sethdico", version: "4.0", category: "Fun", description: "Random jokes with flow.", adminOnly: false, usePrefix: false, cooldown: 2,
 };
 
 module.exports.run = async ({ event, api }) => {
   try {
-    // 2 second timeout then fail to backup
-    const res = await http.get("https://official-joke-api.appspot.com/random_joke", { timeout: 2000 });
-    const { setup, punchline } = res.data;
-    api.sendMessage(`🤣 ${setup}\n\n👉 ${punchline}`, event.sender.id);
+    const res = await http.get("https://official-joke-api.appspot.com/random_joke");
+    const msg = `🤣 ${res.data.setup}\n\n👉 ${res.data.punchline}`;
+    const buttons = [{ type: "postback", title: "🔄 Another One", payload: "joke" }];
+
+    // Flow: Postback "joke" triggers the command again without typing
+    api.sendButton(msg, buttons, event.sender.id);
   } catch (e) {
-    const joke = BACKUP[Math.floor(Math.random() * BACKUP.length)];
-    api.sendMessage(`🤣 ${joke.s}\n\n👉 ${joke.p}`, event.sender.id);
+    api.sendMessage("🤣 Why did the bot fail? Because the API was down.", event.sender.id);
   }
 };
