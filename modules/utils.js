@@ -19,6 +19,18 @@ const parseAI = (res) => {
     return text;
 };
 
+//  Makes the bot feel more human
+const sleep = (ms) => new Promise(res => setTimeout(res, ms));
+
+const humanTyping = async (api, id, text) => {
+    if (!api.sendTypingIndicator) return;
+    await api.sendTypingIndicator(true, id);
+    // Average human types 200ms per character, we'll do a scaled delay max 3s
+    const delay = Math.min(text.length * 10, 3000);
+    await sleep(delay);
+    await api.sendTypingIndicator(false, id);
+};
+
 function log(event) {
     if (event.message?.is_echo || !event.sender) return;
     const senderType = global.ADMINS?.has(event.sender.id) ? "ADMIN" : "USER";
@@ -35,13 +47,4 @@ function getEventType(event) {
     return "unknown";
 }
 
-async function fetchWithRetry(requestFn, retries = 3) {
-    for (let i = 0; i < retries; i++) {
-        try { return await requestFn(); } catch (error) {
-            if (i === retries - 1) throw error;
-            await new Promise(r => setTimeout(r, Math.pow(2, i) * 1000));
-        }
-    }
-}
-
-module.exports = { http, parseAI, log, getEventType, fetchWithRetry };
+module.exports = { http, parseAI, log, getEventType, humanTyping, sleep };
