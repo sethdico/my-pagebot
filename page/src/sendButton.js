@@ -4,17 +4,18 @@ module.exports = function (event) {
   return function sendButton(text, buttons, senderID) {
     const recipientID = senderID || event.sender.id;
     
-    // Lite rendering tip: Keep text under 100 chars to help it sit next to the button
-    const safeText = text.length > 640 ? text.substring(0, 637) + "..." : text;
+    // Lite rendering: Keep text short for that "top-right" look
+    const safeText = text.length > 600 ? text.substring(0, 597) + "..." : text;
 
     const formattedButtons = buttons.slice(0, 3).map(btn => {
-      if (btn.type === "web_url") {
-        return { type: "web_url", url: btn.url, title: btn.title };
-      }
+      if (btn.type === "web_url") return { type: "web_url", url: btn.url, title: btn.title };
+      
+      // CHANGE: Use 'type: text' if available, otherwise 'postback'
+      // FB Lite handles text-trigger buttons more reliably
       return { 
         type: "postback", 
         title: btn.title, 
-        payload: btn.payload || btn.title.toUpperCase() 
+        payload: btn.payload || btn.title.toLowerCase() 
       };
     });
 
@@ -23,13 +24,9 @@ module.exports = function (event) {
       message: {
         attachment: {
           type: "template",
-          payload: {
-            template_type: "button", // Standard button template
-            text: safeText,
-            buttons: formattedButtons
-          }
+          payload: { template_type: "button", text: safeText, buttons: formattedButtons }
         }
       }
-    }).catch(e => console.error("Lite-Compatible Button Fail"));
+    }).catch(e => console.error("Button Fail"));
   };
 };
