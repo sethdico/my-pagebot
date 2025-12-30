@@ -25,11 +25,13 @@ function log(event) {
     console.log(`[${senderType}] ${event.sender.id}: ${event.message?.text || "Media"}`);
 }
 
+// FIXED: Proper reply detection
 function getEventType(event) {
     if (event.postback) return "postback";
     if (event.message) {
+        // Check for reply_to FIRST before checking attachments
+        if (event.message.reply_to) return "message_reply";
         if (event.message.attachments) return "attachment";
-        if (event.message.reply_to) return "reply";
         return "text"; 
     }
     return "unknown";
