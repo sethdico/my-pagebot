@@ -7,54 +7,63 @@ module.exports = async function (event, api) {
     const reply = (msg) => api.sendMessage(msg, senderID);
     const isAdmin = global.ADMINS.has(senderID);
 
-    // 1. Get started / Welcome
+    // 1. Maintenance Gatekeeper
+    if (global.MAINTENANCE_MODE && !isAdmin) {
+        return reply(`🛠️ **MAINTENANCE MODE**\n━━━━━━━━━━━━━━━━\n${global.MAINTENANCE_REASON}`);
+    }
+
+    // 2. Setup (Welcome)
     if (event.postback?.payload === "GET_STARTED_PAYLOAD") {
         const info = await api.getUserInfo(senderID);
         return reply(`👋 Hi ${info.first_name || "there"}! Type 'help' to start.`);
     }
 
     if (event.message?.is_echo) return;
-
-    // 2. Standardize Input (Handle Postbacks as Text for Lite compatibility)
-    let body = event.message?.text || event.postback?.payload || "";
+    const body = event.message?.text || event.postback?.payload || "";
     const hasAttachments = !!(event.message?.attachments);
     if (!body && !hasAttachments) return;
 
-    // 3. MAINTENANCE GATEKEEPER
-    if (global.MAINTENANCE_MODE && !isAdmin) {
-        return reply(`🛠️ **MAINTENANCE MODE**\n━━━━━━━━━━━━━━━━\n${global.MAINTENANCE_REASON}`);
-    }
-
-    // 4. COMMAND DETECTION (PRIORITY #1)
+    // 3. Command Recognition Logic
     const prefix = global.PREFIX || ".";
     const isPrefixed = body.startsWith(prefix);
-    const cleanInput = isPrefixed ? body.slice(prefix.length).trim() : body.trim();
-    
-    const args = cleanInput.split(/\s+/);
+    const input = isPrefixed ? body.slice(prefix.length).trim() : body.trim();
+    const args = input.split(/\s+/);
     const cmdName = args.shift().toLowerCase();
 
     const command = global.client.commands.get(cmdName) || 
                     global.client.commands.get(global.client.aliases.get(cmdName));
 
+    // 4. THE COMMAND GATE (Priority #1)
     if (command) {
         if (command.config.adminOnly && !isAdmin) return reply("⛔ Admin only.");
         try {
+            db.trackCommand(cmdName);
             await command.run({ event, args, api, reply });
-            return; // EXIT HERE: Stops AI from replying to commands
+            return; // EXIT: Prevents AI from replying to command words
         } catch (e) {
             console.error(e);
             return reply(`❌ Error in ${cmdName}.`);
         }
     }
 
-    // 5. ANTI-SPAM
+    // 5. Traditional Help Category List
+    const categories = ["AI", "FUN", "UTILITY", "ADMIN"];
+    if (categories.includes(body.toUpperCase())) {
+        let list = `📁 **${body.toUpperCase()} COMMANDS:**\n\n`;
+        for (const [name, cmd] of global.client.commands) {
+            if (cmd.config.category?.toUpperCase() === body.toUpperCase()) list += `• ${name}\n`;
+        }
+        return reply(list);
+    }
+
+    // 6. Anti-Spam
     let userData = spamMap.get(senderID) || { count: 0, time: Date.now() };
     if (Date.now() - userData.time > 5000) { userData.count = 0; userData.time = Date.now(); }
     userData.count++;
     spamMap.set(senderID, userData);
     if (userData.count > 10) return reply("⏳ Slow down."); 
 
-    // 6. AI FALLBACK (Only if no command was found)
+    // 7. AI Fallback (Only if not a command)
     const ai = global.client.commands.get("ai");
     if (ai && (body.length > 0 || hasAttachments)) {
         try {
