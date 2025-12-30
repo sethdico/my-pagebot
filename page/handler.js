@@ -4,18 +4,22 @@ module.exports = async function (event, api) {
     if (!event.sender?.id) return;
     const senderID = event.sender.id;
     const reply = (msg) => api.sendMessage(msg, senderID);
+    const isAdmin = global.ADMINS.has(senderID);
+
+    if (global.MAINTENANCE_MODE && !isAdmin) {
+        return reply("🛠️ The owner is currently updating and fixing the bot. Please message the owner if you have any urgent problems.");
+    }
 
     if (event.postback?.payload === "GET_STARTED_PAYLOAD") {
         const info = await api.getUserInfo(senderID);
-        return reply(`👋 Hi ${info.first_name || "there"}! I'm Amduspage. Type 'help' to start.`);
+        return reply(`👋 Hi ${info.first_name || "there"}! Type 'help' to start.`);
     }
 
     let userData = spamMap.get(senderID) || { count: 0, time: Date.now() };
     if (Date.now() - userData.time > 5000) { userData.count = 0; userData.time = Date.now(); }
     userData.count++;
     spamMap.set(senderID, userData);
-
-    if (userData.count === 11) return reply("⏳ Slow down! I'm ignoring you for a few seconds.");
+    if (userData.count === 11) return reply("⏳ Slow down! You're typing too fast.");
     if (userData.count > 10) return; 
 
     if (event.message?.is_echo) return;
@@ -33,7 +37,7 @@ module.exports = async function (event, api) {
                     global.client.commands.get(global.client.aliases.get(cmdName));
 
     if (command) {
-        if (command.config.adminOnly && !global.ADMINS.has(senderID)) return reply("⛔ Admin only.");
+        if (command.config.adminOnly && !isAdmin) return reply("⛔ Admin only.");
         try {
             await command.run({ event, args, api, reply });
         } catch (e) {
@@ -44,6 +48,12 @@ module.exports = async function (event, api) {
         }
     } else if ((body.length > 0 || hasAttachments) && !event.message?.is_echo) {
         const ai = global.client.commands.get("ai");
-        if (ai) await ai.run({ event, args: body.trim().split(/\s+/), api, reply });
+        if (ai) {
+            try {
+                await ai.run({ event, args: body.trim().split(/\s+/), api, reply });
+            } finally {
+                if (api.sendTypingIndicator) api.sendTypingIndicator(false, senderID);
+            }
+        }
     }
 };
