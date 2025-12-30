@@ -15,19 +15,20 @@ async function sendYouTubeThumbnail(youtubeUrl, senderID, api) {
 }
 
 module.exports.config = {
-  name: "ai", author: "Sethdico", version: "16.30", category: "AI", description: "Advanced AI.", adminOnly: false, usePrefix: false, cooldown: 0, 
+  name: "ai", author: "Sethdico", version: "16.40", category: "AI", description: "Advanced AI.", adminOnly: false, usePrefix: false, cooldown: 0, 
 };
 
 module.exports.run = async function ({ event, args, api, reply }) {
   const senderID = event.sender.id;
   const userPrompt = args.join(" ").trim();
   const apiKey = process.env.CHIPP_API_KEY;
-  if (!apiKey) return reply("❌ chipp_api_key missing.");
 
   let imageUrl = event.message?.attachments?.[0]?.payload?.url || event.message?.reply_to?.attachments?.[0]?.payload?.url || "";
 
-  if (imageUrl && !userPrompt && event.message?.attachments) return reply("🖼️ I see the image. Reply to it and type your instructions.");
-  if (!userPrompt && !imageUrl) return reply("👋 hi. i'm amdusbot. i can search, see images, and write files.");
+  if (imageUrl && !userPrompt && event.message?.attachments) {
+    return reply("🖼️ I see the image. Reply to it and type your instructions.");
+  }
+  if (!userPrompt && !imageUrl) return reply("👋 hi. i'm amdusbot. ask me anything.");
 
   const youtubeRegex = /(?:youtube\.com\/watch\?v=|youtu\.be\/)([a-zA-Z0-9_-]{11})/;
   if (userPrompt && youtubeRegex.test(userPrompt)) await sendYouTubeThumbnail(userPrompt, senderID, api);
@@ -58,7 +59,9 @@ module.exports.run = async function ({ event, args, api, reply }) {
 
     if (match) {
       const fileUrl = match[0].replace(/[).,]+$/, ""); 
-      if (replyContent.replace(match[0], "").trim()) await reply(replyContent.replace(match[0], "").trim());
+      const textPart = replyContent.replace(match[0], "").trim();
+      if (textPart) await reply(textPart);
+
       const fileName = `file_${Date.now()}${path.extname(fileUrl.split('?')[0]) || '.bin'}`;
       const filePath = path.join(global.CACHE_PATH, fileName);
       const writer = fs.createWriteStream(filePath);
