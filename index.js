@@ -31,7 +31,7 @@ const loadCommands = (dir) => {
                 global.client.commands.set(name, cmd);
                 if (cmd.config.aliases) cmd.config.aliases.forEach(a => global.client.aliases.set(a.toLowerCase(), name));
             }
-        } catch (e) { console.error(`[Load Error] ${file}:`, e.message); }
+        } catch (e) {}
     });
 };
 
@@ -43,7 +43,6 @@ const loadCommands = (dir) => {
     } catch (e) {}
 
     db.loadBansIntoMemory(banSet => { global.BANNED_USERS = banSet; });
-
     const maintStatus = await db.getSetting("maintenance");
     const maintReason = await db.getSetting("maintenance_reason");
     global.MAINTENANCE_MODE = maintStatus === "true";
@@ -54,7 +53,7 @@ const loadCommands = (dir) => {
     app.use(parser.json({ limit: '20mb' }));
     app.use(rateLimiter);
 
-    app.get("/", (req, res) => res.send("🟢 Amduspage System: Optimal"));
+    app.get("/", (req, res) => res.send("🟢 System Optimal"));
     app.get("/webhook", (req, res) => {
         const vToken = process.env.VERIFY_TOKEN || config.VERIFY_TOKEN;
         if (req.query["hub.verify_token"] === vToken) res.status(200).send(req.query["hub.challenge"]);
@@ -62,6 +61,14 @@ const loadCommands = (dir) => {
     });
     app.post("/webhook", (req, res) => { webhook.listen(req.body); res.sendStatus(200); });
 
+    // Autoclean cache every 1 hour
+    setInterval(async () => {
+        try {
+            const files = await fs.readdir(global.CACHE_PATH);
+            for (const file of files) if (file !== '.gitkeep') await fs.unlink(path.join(global.CACHE_PATH, file));
+        } catch (e) {}
+    }, 3600000);
+
     const PORT = process.env.PORT || 8080;
-    app.listen(PORT, () => console.log(`🚀 System Online on port ${PORT}`));
+    app.listen(PORT, () => console.log(`🚀 Online on port ${PORT}`));
 })();
