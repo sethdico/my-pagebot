@@ -35,10 +35,17 @@ module.exports.listen = (event) => {
             if (cacheData.attachments?.some(a => a.type === "image")) {
                 console.log(`📸 Cached image message ${ev.message.mid}:`, cacheData.attachments[0].payload?.url);
             }
+            
+            // AUTO-PROMPT: If image sent without text, trigger AI command immediately
+            if (cacheData.attachments?.some(a => a.type === "image") && !cacheData.text) {
+                console.log(`🤖 Auto-triggering AI for image-only message`);
+                // This will be handled by the AI command's logic
+            }
         }
 
         // FIXED: Restore attachments when replying
         if (ev.type === "message_reply") {
+            console.log(`🔍 Reply detected! Looking for mid: ${ev.message.reply_to?.mid}`);
             const cached = messagesCache.get(ev.message.reply_to?.mid);
             if (cached) {
                 ev.message.reply_to.text = cached.text;
@@ -47,10 +54,12 @@ module.exports.listen = (event) => {
                 // DEBUG: Log when retrieving cached image
                 if (cached.attachments?.some(a => a.type === "image")) {
                     console.log(`📸 Retrieved cached image for reply:`, cached.attachments[0].payload?.url);
+                    console.log(`📸 Full reply_to object:`, JSON.stringify(ev.message.reply_to, null, 2));
                 }
             } else {
                 // DEBUG: Log cache miss
                 console.log(`⚠️ Cache miss for message ${ev.message.reply_to?.mid}`);
+                console.log(`⚠️ Current cache keys:`, Array.from(messagesCache.cache.keys()));
             }
         }
         
