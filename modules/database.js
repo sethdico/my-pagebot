@@ -1,41 +1,47 @@
-const sqlite3 = require('sqlite3').verbose();
-const path = require('path');
+const mongoose = require('mongoose');
 
-const dbPath = path.join(__dirname, '../bot_data.db');
-const db = new sqlite3.Database(dbPath);
-db.configure("busyTimeout", 5000);
+const uri = process.env.MONGODB_URI;
 
-db.serialize(() => {
-    db.run(`CREATE TABLE IF NOT EXISTS bans (id TEXT PRIMARY KEY)`);
-    db.run(`CREATE TABLE IF NOT EXISTS reminders (id TEXT PRIMARY KEY, userId TEXT, message TEXT, fireAt INTEGER)`);
-    db.run(`CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT)`);
-    db.run(`CREATE TABLE IF NOT EXISTS stats (command TEXT PRIMARY KEY, count INTEGER DEFAULT 0)`);
-    db.run(`CREATE TABLE IF NOT EXISTS user_stats (userId TEXT PRIMARY KEY, name TEXT, count INTEGER DEFAULT 0)`);
-    
-    db.run(`DELETE FROM reminders WHERE fireAt < ?`, [Date.now()]);
-    db.run(`VACUUM`); 
-});
+if (uri) {
+    mongoose.connect(uri)
+        .then(() => console.log("🟢 connected to mongodb atlas."))
+        .catch(err => console.error("🔴 mongodb error:", err.message));
+}
+
+const BanSchema = new mongoose.Schema({ userId: { type: String, unique: true } });
+const ReminderSchema = new mongoose.Schema({ id: String, userId: String, message: String, fireAt: Number });
+const SettingSchema = new mongoose.Schema({ key: { type: String, unique: true }, value: String });
+const StatsSchema = new mongoose.Schema({ command: { type: String, unique: true }, count: { type: Number, default: 0 } });
+const UserStatsSchema = new mongoose.Schema({ userId: { type: String, unique: true }, name: String, count: { type: Number, default: 0 } });
+
+const Ban = mongoose.model('Ban', BanSchema);
+const Reminder = mongoose.model('Reminder', ReminderSchema);
+const Setting = mongoose.model('Setting', SettingSchema);
+const Stat = mongoose.model('Stat', StatsSchema);
+const UserStat = mongoose.model('UserStat', UserStatsSchema);
 
 module.exports = {
-    addBan: (id) => db.run("INSERT OR REPLACE INTO bans (id) VALUES (?)", [id]),
-    removeBan: (id) => db.run("DELETE FROM bans WHERE id = ?", [id]),
-    loadBansIntoMemory: (cb) => db.all("SELECT id FROM bans", (err, rows) => cb(new Set(rows?.map(r => r.id) || []))),
-    addReminder: (r) => db.run("INSERT INTO reminders VALUES (?,?,?,?)", [r.id, r.userId, r.message, r.fireAt]),
-    deleteReminder: (id) => db.run("DELETE FROM reminders WHERE id = ?", [id]),
-    getActiveReminders: (cb) => db.all("SELECT * FROM reminders WHERE fireAt > ?", [Date.now()], (err, rows) => cb(rows || [])),
-    setSetting: (key, val) => db.run("INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)", [key, val]),
-    getSetting: (key) => new Promise((res) => {
-        db.get("SELECT value FROM settings WHERE key = ?", [key], (err, row) => res(row ? row.value : null));
-    }),
-    // TRACKER: Saves name, ID, and usage count
-    trackCommand: (name, userId, userName) => {
-        db.run("INSERT INTO stats (command, count) VALUES (?, 1) ON CONFLICT(command) DO UPDATE SET count = count + 1", [name]);
-        db.run("INSERT INTO user_stats (userId, name, count) VALUES (?, ?, 1) ON CONFLICT(userId) DO UPDATE SET count = count + 1, name = ?", [userId, userName, userName]);
+    addBan: (id) => Ban.create({ userId: id }).catch(() => {}),
+    removeBan: (id) => Ban.deleteOne({ userId: id }),
+    loadBansIntoMemory: async (cb) => {
+        const rows = await Ban.find({});
+        cb(new Set(rows.map(r => r.userId)));
     },
-    getStats: () => new Promise((res) => {
-        db.all("SELECT * FROM stats ORDER BY count DESC LIMIT 5", (err, rows) => res(rows || []));
-    }),
-    getAllUsers: () => new Promise((res) => {
-        db.all("SELECT * FROM user_stats ORDER BY count DESC LIMIT 15", (err, rows) => res(rows || []));
-    })
+    addReminder: (r) => Reminder.create(r),
+    deleteReminder: (id) => Reminder.deleteOne({ id }),
+    getActiveReminders: async (cb) => {
+        const rows = await Reminder.find({ fireAt: { $gt: Date.now() } });
+        cb(rows);
+    },
+    setSetting: (key, val) => Setting.findOneAndUpdate({ key }, { value: val }, { upsert: true }),
+    getSetting: async (key) => {
+        const row = await Setting.findOne({ key });
+        return row ? row.value : null;
+    },
+    trackCommand: async (name, userId, userName) => {
+        await Stat.findOneAndUpdate({ command: name }, { $inc: { count: 1 } }, { upsert: true });
+        await UserStat.findOneAndUpdate({ userId }, { name: userName, $inc: { count: 1 } }, { upsert: true });
+    },
+    getStats: () => Stat.find({}).sort({ count: -1 }).limit(5),
+    getAllUsers: () => UserStat.find({}).sort({ count: -1 }).limit(15)
 };
