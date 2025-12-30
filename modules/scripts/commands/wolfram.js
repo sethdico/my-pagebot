@@ -3,9 +3,9 @@ const { http, parseAI } = require("../../utils");
 module.exports.config = {
     name: "wolfram",
     author: "Sethdico",
-    version: "7.0",
+    version: "8.5",
     category: "Utility",
-    description: "Solve math/science with graphs and cross-search.",
+    description: "WolframAlpha.",
     adminOnly: false,
     usePrefix: false,
     cooldown: 5,
@@ -35,50 +35,43 @@ module.exports.run = async function ({ event, args, api, reply }) {
             return reply("❌ Wolfram couldn't solve that. Try a clearer query.");
         }
 
-        let interpretation = "";
-        let primaryResult = "";
-        let graphUrl = "";
+        let fullReport = `🧮 **WOLFRAM ALPHA REPORT**\n━━━━━━━━━━━━━━━━\n`;
+        let images = [];
 
-        // 1. Deep Pod Extraction
+        // 1. Iterate through ALL pods to extract every bit of info
         if (res.pods) {
-            for (const pod of res.pods) {
+            res.pods.forEach(pod => {
                 const title = pod.title;
-                const text = pod.subpods[0]?.plaintext;
-                const img = pod.subpods[0]?.img?.src;
-
-                // Grab the input interpretation
-                if (title === "Input interpretation" || title === "Input") {
-                    interpretation = text;
-                }
-                // Grab the main answer
-                else if (pod.primary || title === "Result" || title === "Decimal approximation") {
-                    primaryResult = text;
-                }
-                // Grab the best graph/plot if we don't have one yet
-                if (!graphUrl && (title.includes("Plot") || title.includes("Graph"))) {
-                    graphUrl = img;
-                }
-            }
+                const subpods = pod.subpods || [];
+                
+                subpods.forEach(sub => {
+                    if (sub.plaintext) {
+                        fullReport += `📍 **${title}:**\n${sub.plaintext}\n\n`;
+                    }
+                    // Collect images that represent plots, graphs, or maps
+                    if (sub.img?.src && (title.includes("Plot") || title.includes("Graph") || title.includes("Map") || title.includes("Illustration"))) {
+                        images.push(sub.img.src);
+                    }
+                });
+            });
         }
 
-        // 2. Build the Message
-        let msg = `🧮 **WOLFRAM ALPHA**\n━━━━━━━━━━━━━━━━\n`;
-        msg += `📥 **Q:** ${interpretation || input}\n\n`;
-        msg += `📤 **A:**\n${primaryResult || "See graph/details below."}`;
+        // 2. Send the full text report
+        // We limit the length to avoid Facebook's 2000 char limit (sendMessage.js handles splitting, but we keep it clean)
+        await api.sendMessage(fullReport.trim(), id);
 
-        // 3. Setup Flow Buttons
+        // 3. Send all collected graphs as attachments (Max 3 to prevent spam)
+        for (const imgUrl of images.slice(0, 3)) {
+            await api.sendAttachment("image", imgUrl, id);
+        }
+
+        // 4. Setup Flow Buttons for cross-searching
         const buttons = [
             { type: "postback", title: "🔍 Google", payload: `google ${input}` },
             { type: "postback", title: "📚 Wiki", payload: `wiki ${input}` }
         ];
 
-        // 4. Send Graph if available
-        if (graphUrl) {
-            await api.sendAttachment("image", graphUrl, id);
-        }
-
-        // 5. Send Main Message with Buttons
-        return api.sendButton(msg, buttons, id);
+        return api.sendButton("💡 Still need more info?", buttons, id);
 
     } catch (e) {
         console.error("Wolfram Error:", e.message);
