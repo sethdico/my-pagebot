@@ -3,18 +3,15 @@ const path = require('path');
 
 const dbPath = path.join(__dirname, '../bot_data.db');
 const db = new sqlite3.Database(dbPath);
-
-// NEW: Prevents crashes during high traffic on Render
 db.configure("busyTimeout", 5000);
 
 db.serialize(() => {
     db.run(`CREATE TABLE IF NOT EXISTS bans (id TEXT PRIMARY KEY)`);
     db.run(`CREATE TABLE IF NOT EXISTS reminders (id TEXT PRIMARY KEY, userId TEXT, message TEXT, fireAt INTEGER)`);
     db.run(`CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT)`);
-    // NEW: Tracks which commands are popular
     db.run(`CREATE TABLE IF NOT EXISTS stats (command TEXT PRIMARY KEY, count INTEGER DEFAULT 0)`);
     
-    db.run(`DELETE FROM reminders WHERE fireAt < ${Date.now()}`);
+    db.run(`DELETE FROM reminders WHERE fireAt < ?`, [Date.now()]);
     db.run(`VACUUM`); 
 });
 
@@ -29,9 +26,8 @@ module.exports = {
     getSetting: (key) => new Promise((res) => {
         db.get("SELECT value FROM settings WHERE key = ?", [key], (err, row) => res(row ? row.value : null));
     }),
-    // NEW: Increment command usage
     trackCommand: (name) => db.run("INSERT INTO stats (command, count) VALUES (?, 1) ON CONFLICT(command) DO UPDATE SET count = count + 1", [name]),
     getStats: () => new Promise((res) => {
-        db.all("SELECT * FROM stats ORDER BY count DESC", (err, rows) => res(rows || []));
+        db.all("SELECT * FROM stats ORDER BY count DESC LIMIT 5", (err, rows) => res(rows || []));
     })
 };
