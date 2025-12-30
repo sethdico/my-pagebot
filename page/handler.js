@@ -1,5 +1,5 @@
-const spamMap = new Map();
 const db = require("../modules/database");
+const cooldowns = new Map();
 
 module.exports = async function (event, api) {
     if (!event.sender?.id) return;
@@ -46,11 +46,30 @@ module.exports = async function (event, api) {
 
     if (command) {
         if (command.config.adminOnly && !isAdmin) return reply("⛔ Admin only.");
+
+        // ✨ COOLDOWN CHECK ✨
+        if (command.config.cooldown && command.config.cooldown > 0 && !isAdmin) {
+            const now = Date.now();
+            const cooldownKey = `${senderID}-${command.config.name}`;
+            const lastUsed = cooldowns.get(cooldownKey) || 0;
+            const cooldownAmount = command.config.cooldown * 1000;
+            const timeLeft = (lastUsed + cooldownAmount) - now;
+
+            if (timeLeft > 0) {
+                const seconds = Math.ceil(timeLeft / 1000);
+                return reply(`⏳ wait ${seconds}s before using ${command.config.name} again`);
+            }
+            cooldowns.set(cooldownKey, now);
+        }
+
         try {
             db.trackCommand(cmdName, senderID, name);
             await command.run({ event, args: words, api, reply });
             return; // STOP: Don't trigger AI for commands
-        } catch (e) { reply(`❌ Error in ${cmdName}.`); }
+        } catch (e) { 
+            global.log.error(`error running ${cmdName}:`, e.message);
+            reply(`❌ error: ${e.message}`); 
+        }
     } 
 
     // 4. AI FALLBACK
