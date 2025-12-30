@@ -6,12 +6,12 @@ module.exports = async function (event, api) {
     const reply = (msg) => api.sendMessage(msg, senderID);
     const isAdmin = global.ADMINS.has(senderID);
 
-    // 1. Maintenance Check
+    // 1. Maintenance Blocker
     if (global.MAINTENANCE_MODE && !isAdmin) {
         return reply(`🛠️ **MAINTENANCE MODE**\n━━━━━━━━━━━━━━━━\n${global.MAINTENANCE_REASON}\n\n📩 Message the owner if you have urgent problems.`);
     }
 
-    // 2. Welcome logic
+    // 2. Welcome Logic
     if (event.postback?.payload === "GET_STARTED_PAYLOAD") {
         const info = await api.getUserInfo(senderID);
         return reply(`👋 Hi ${info.first_name || "there"}! Type 'help' to start.`);
@@ -30,7 +30,18 @@ module.exports = async function (event, api) {
     const hasAttachments = !!(event.message?.attachments);
     if (!body && !hasAttachments) return;
 
-    // 4. Prefix-Free Command Logic
+    // 4. FLOW AUTO-CATCH (Category Browse)
+    const categories = ["AI", "FUN", "UTILITY", "ADMIN"];
+    if (categories.includes(body.toUpperCase())) {
+        const cat = body.toUpperCase();
+        let list = `📁 **${cat} COMMANDS:**\n━━━━━━━━━━━━━━━━\n`;
+        for (const [name, cmd] of global.client.commands) {
+            if (cmd.config.category?.toUpperCase() === cat) list += `• ${name}\n`;
+        }
+        return reply(list);
+    }
+
+    // 5. Command Logic (Prefix-Free)
     const prefix = global.PREFIX;
     const isPrefixed = body.startsWith(prefix);
     const input = isPrefixed ? body.slice(prefix.length).trim() : body.trim();
@@ -44,13 +55,13 @@ module.exports = async function (event, api) {
         try {
             await command.run({ event, args, api, reply });
         } catch (e) {
-            console.error(`Error:`, e.message);
+            console.error(e);
             reply(`❌ Logic error in ${cmdName}.`);
         } finally {
             if (api.sendTypingIndicator) api.sendTypingIndicator(false, senderID);
         }
     } else if ((body.length > 0 || hasAttachments) && !event.message?.is_echo) {
-        // AI Fallback
+        // 6. AI Fallback
         const ai = global.client.commands.get("ai");
         if (ai) {
             try { await ai.run({ event, args: body.trim().split(/\s+/), api, reply }); }
