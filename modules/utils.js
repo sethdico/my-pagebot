@@ -10,11 +10,7 @@ const http = axios.create({
 const parseAI = (res) => {
     if (!res || !res.data) return null;
     const d = res.data;
-    // 1. OpenAI/Chipp Format
     if (d.choices?.[0]?.message?.content) return d.choices[0].message.content;
-    // 2. Error Reporting
-    if (d.error) return `⚠️ API Error: ${d.error.message || d.error}`;
-    // 3. Fallback logic for all other APIs
     let text = d.answer || d.response || d.result || d.message || d.content || (typeof d === 'string' ? d : null);
     if (typeof text === 'string' && text.includes("output_done")) {
         const match = text.match(/"text":"(.*?)"/);
