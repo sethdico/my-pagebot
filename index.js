@@ -11,15 +11,7 @@ const config = require("./config.json");
 const app = express();
 app.set('trust proxy', 1); 
 
-const PAGE_ACCESS_TOKEN = process.env.PAGE_ACCESS_TOKEN || config.PAGE_ACCESS_TOKEN;
-const VERIFY_TOKEN = process.env.VERIFY_TOKEN || config.VERIFY_TOKEN;
-
-if (!PAGE_ACCESS_TOKEN || !VERIFY_TOKEN) {
-    console.error("🔴 CRITICAL: Page Access Token or Verify Token is missing!");
-    process.exit(1);
-}
-
-global.PAGE_ACCESS_TOKEN = PAGE_ACCESS_TOKEN;
+global.PAGE_ACCESS_TOKEN = process.env.PAGE_ACCESS_TOKEN || config.PAGE_ACCESS_TOKEN;
 global.ADMINS = new Set(process.env.ADMINS ? process.env.ADMINS.split(",").filter(Boolean) : (config.ADMINS || []));
 global.PREFIX = process.env.PREFIX || config.PREFIX || ".";
 global.CACHE_PATH = path.join(__dirname, "cache");
@@ -51,9 +43,11 @@ const loadCommands = (dir) => {
     } catch (e) {}
 
     db.loadBansIntoMemory(banSet => { global.BANNED_USERS = banSet; });
-    
+
     const maintStatus = await db.getSetting("maintenance");
+    const maintReason = await db.getSetting("maintenance_reason");
     global.MAINTENANCE_MODE = maintStatus === "true";
+    global.MAINTENANCE_REASON = maintReason || "The owner is currently updating and fixing the bot.";
 
     loadCommands(path.join(__dirname, "modules/scripts/commands"));
     
@@ -66,10 +60,7 @@ const loadCommands = (dir) => {
         if (req.query["hub.verify_token"] === vToken) res.status(200).send(req.query["hub.challenge"]);
         else res.sendStatus(403);
     });
-    app.post("/webhook", (req, res) => {
-        webhook.listen(req.body);
-        res.sendStatus(200);
-    });
+    app.post("/webhook", (req, res) => { webhook.listen(req.body); res.sendStatus(200); });
 
     const PORT = process.env.PORT || 8080;
     app.listen(PORT, () => console.log(`🚀 System Online on port ${PORT}`));
