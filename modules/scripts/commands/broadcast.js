@@ -1,9 +1,9 @@
-const { http } = require("../../utils");
+const db = require("../../database");
 
 module.exports.config = { 
     name: "broadcast", 
     author: "Sethdico",
-    version: "2.5",
+    version: "3.0",
     category: "Admin",
     description: "Send announcement to all users.",
     adminOnly: true,
@@ -18,36 +18,33 @@ module.exports.run = async ({ event, args, api, reply }) => {
     if (!msg) return reply("📢 Usage: broadcast <message>");
 
     try {
-        // Fetch recent conversations
-        const res = await http.get(`https://graph.facebook.com/v21.0/me/conversations?fields=participants&limit=100&access_token=${global.PAGE_ACCESS_TOKEN}`);
-        
-        // Filter out YOUR ID from the list
-        const users = res.data.data
-            .map(c => c.participants.data[0].id)
-            .filter(id => id !== senderID); // <--- THIS PREVENTS SENDING TO YOU
+        const users = await db.getAllUsers();
+        const recipients = users.filter(u => u.userId !== senderID).map(u => u.userId);
 
-        if (users.length === 0) return reply("ℹ️ No other active users found to broadcast to.");
+        if (recipients.length === 0) return reply("ℹ️ no active users to broadcast to");
 
-        reply(`🚀 Starting broadcast to ${users.length} users...`);
+        reply(`🚀 broadcasting to ${recipients.length} users...`);
 
-        let successCount = 0;
-        let failCount = 0;
+        let success = 0, failed = 0;
+        const errors = [];
 
-        for (const id of users) {
+        for (const id of recipients) {
             try {
                 await api.sendMessage(`📢 **ANNOUNCEMENT**\n\n${msg}`, id);
-                successCount++;
-                // Small delay to prevent Facebook spam detection
-                await new Promise(r => setTimeout(r, 500)); 
+                success++;
+                await new Promise(r => setTimeout(r, 500)); // Rate limit
             } catch (err) {
-                failCount++;
+                failed++;
+                if (errors.length < 5) errors.push(`${id}: ${err.message}`);
             }
         }
 
-        reply(`✅ **Broadcast Complete**\n━━━━━━━━━━━━━━━━\n● Sent to: ${successCount}\n● Failed: ${failCount}\n● Skipped: You (Admin)`);
+        let report = `✅ **Broadcast Complete**\n────────────────\n✓ Sent: ${success}\n✗ Failed: ${failed}`;
+        if (errors.length > 0) report += `\n\nErrors:\n${errors.join("\n")}`;
+        
+        reply(report);
 
     } catch (e) { 
-        console.error("Broadcast Error:", e);
-        reply("❌ Critical failure during broadcast."); 
+        reply("❌ broadcast failed"); 
     }
 };
