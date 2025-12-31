@@ -3,9 +3,11 @@ const messageHandler = require('./page/main');
 const logger = require('./modules/utils/logger');
 
 module.exports.listen = (event) => {
-    if (!event || event.object !== 'page') return;
+    if (!event || event.object !== 'page' || !event.entry) return;
     
     event.entry.forEach(entry => {
+        if (!Array.isArray(entry.messaging)) return;
+
         entry.messaging.forEach(async (ev) => {
             if (!ev.sender?.id || global.BANNED_USERS.has(ev.sender.id)) {
                 return;
@@ -13,7 +15,7 @@ module.exports.listen = (event) => {
             
             ev.type = getEventType(ev);
             
-            // cache message for replies
+            // Cache message for replies
             if (ev.message?.mid) {
                 const cacheData = {
                     text: ev.message.text,
@@ -25,7 +27,7 @@ module.exports.listen = (event) => {
                 global.messageCache.set(ev.message.mid, cacheData);
             }
             
-            // restore replied message from cache
+            // Restore replied message from cache
             if (ev.type === 'message_reply') {
                 const cached = global.messageCache.get(ev.message.reply_to?.mid);
                 if (cached) {
@@ -36,12 +38,18 @@ module.exports.listen = (event) => {
             
             if (ev.message?.is_echo) return;
             
-            // log event
+            // Log event
             const type = global.ADMINS?.has(ev.sender.id) ? 'admin' : 'user';
             const text = ev.message?.text || ev.postback?.payload || 'media';
             logger.info(`[${type}] ${ev.sender.id}: ${text.substring(0, 50)}`);
             
-            setImmediate(() => messageHandler(ev));
+            setImmediate(() => {
+                try {
+                    messageHandler(ev);
+                } catch (e) {
+                    logger.error(`Handler error: ${e.message}`);
+                }
+            });
         });
     });
 };
