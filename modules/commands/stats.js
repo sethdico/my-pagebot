@@ -27,7 +27,7 @@ module.exports.run = async function ({ reply }) {
     
     msg += `bot\n`;
     msg += `commands: ${global.client.commands.size}\n`;
-    msg += `sessions: ${global.sessions.size}\n`;
+    msg += `sessions: ${global.sessions.size()}\n`;
     msg += `banned: ${global.BANNED_USERS.size}\n\n`;
 
     msg += `users\n`;
