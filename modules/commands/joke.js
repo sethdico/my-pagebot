@@ -1,4 +1,4 @@
-const { http } = require("../../utils");
+const { http } = require("../utils");
 
 module.exports.config = {
   name: "joke", author: "Sethdico", version: "4.0", category: "Fun", description: "Random jokes with flow.", adminOnly: false, usePrefix: false, cooldown: 2,

@@ -1,4 +1,4 @@
-const { http } = require("../../utils");
+const { http } = require("../utils");
 const sessions = new Map();
 
 // cleanup old sessions every 10 min

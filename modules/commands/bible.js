@@ -1,4 +1,4 @@
-const { http } = require("../../utils");
+const { http } = require("../utils");
 
 module.exports.config = {
     name: "bible",

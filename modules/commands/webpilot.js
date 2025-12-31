@@ -1,4 +1,4 @@
-const { http, parseAI } = require("../../utils");
+const { http, parseAI } = require("../utils");
 const API_URLS = require("../../../config/apis");
 
 module.exports.config = { 

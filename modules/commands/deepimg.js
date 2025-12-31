@@ -1,4 +1,4 @@
-const { http } = require("../../utils");
+const { http } = require("../utils");
 const API_URLS = require("../../../config/apis");
 const drawQueue = new Map();
 

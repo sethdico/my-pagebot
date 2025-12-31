@@ -1,4 +1,4 @@
-const db = require("../../database");
+const db = require("../core/database");
 
 global.tempUserList = global.tempUserList || new Map();
 

@@ -1,5 +1,5 @@
 const os = require('os');
-const db = require("../../database");
+const db = require("../core/database");
 
 module.exports.config = {
     name: "stats", 

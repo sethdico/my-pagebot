@@ -1,4 +1,4 @@
-const db = require("../../database");
+const db = require("../core/database");
 const crypto = require("crypto");
 
 const loadReminders = () => {

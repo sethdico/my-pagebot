@@ -1,4 +1,4 @@
-const { http } = require("../../utils");
+const { http } = require("../utils");
 
 const LANGS = {
   en: "english", tl: "tagalog", ja: "japanese", fr: "french", 

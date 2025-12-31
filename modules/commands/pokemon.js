@@ -1,4 +1,4 @@
-const { http } = require("../../utils");
+const { http } = require("../utils");
 const MAX_POKEMON = 1025;
 
 module.exports.config = {

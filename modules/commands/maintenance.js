@@ -1,4 +1,4 @@
-const db = require("../../database");
+const db = require("../core/database");
 
 module.exports.config = {
     name: "maintenance", author: "Sethdico", version: "2.7", category: "Admin", description: "Toggle bot availability.", adminOnly: true, usePrefix: false, cooldown: 0,
