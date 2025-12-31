@@ -1,5 +1,6 @@
 const axios = require("axios");
-const { API_VERSION } = require("../../config.json");
+// UPDATED PATH: Points to config/config.json
+const { API_VERSION } = require("../../config/config.json");
 
 module.exports = function (event) {
   return async function sendCarousel(elements, senderID) {
