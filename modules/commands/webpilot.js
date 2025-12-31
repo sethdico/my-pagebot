@@ -1,5 +1,5 @@
 const { http, parseAI } = require("../utils");
-const API_URLS = require("../../../config/apis");
+const API_URLS = require("../../config/apis");
 
 module.exports.config = { 
     name: "webpilot", author: "Sethdico", version: "6.1", category: "AI", description: "Search the web.", adminOnly: false, usePrefix: false, cooldown: 5 

@@ -1,5 +1,5 @@
 const { http } = require("../utils");
-const API_URLS = require("../../../config/apis");
+const API_URLS = require("../../config/apis");
 const drawQueue = new Map();
 
 module.exports.config = {

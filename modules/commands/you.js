@@ -1,5 +1,5 @@
 const { http } = require("../utils");
-const API_URLS = require("../../../config/apis");
+const API_URLS = require("../../config/apis");
 
 module.exports.config = { 
     name: "you", author: "Sethdico", category: "AI", version: "1.1", description: "You.com Search.", adminOnly: false, usePrefix: false, cooldown: 5 

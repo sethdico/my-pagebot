@@ -1,5 +1,5 @@
 const { http, parseAI } = require("../utils");
-const API_URLS = require("../../../config/apis");
+const API_URLS = require("../../config/apis");
 
 module.exports.config = {
   name: "copilot", author: "Sethdico", version: "6.1", category: "AI", description: "Copilot AI (default, think, gpt5)", adminOnly: false, usePrefix: false, cooldown: 5,
