@@ -171,8 +171,10 @@ const db = {
     getAllUsers: async () => {
         try {
             const cutoff = new Date(Date.now() - CONSTANTS.THREE_DAYS);
+            // FIXED: Added .lean() to make sure we get plain objects
             return await UserStat.find({ lastActive: { $gte: cutoff } })
-                .sort({ lastActive: -1 });
+                .sort({ lastActive: -1 })
+                .lean();
         } catch (e) {
             logger.error('failed to get users:', e.message);
             return [];
