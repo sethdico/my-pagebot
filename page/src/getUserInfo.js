@@ -4,18 +4,19 @@ module.exports = function (event) {
   return async function getUserInfo(id) {
     const uid = id || event.sender.id;
     try {
-      // just get the basic info
+      // only ask for what we need. 
       const res = await axios.get(
         `https://graph.facebook.com/v21.0/${uid}?fields=first_name,last_name,profile_pic&access_token=${global.PAGE_ACCESS_TOKEN}`
       );
       
-      const { first_name, last_name, profile_pic } = res.data;
+      if (!res.data || res.data.error) return null;
+
       return {
-        name: `${first_name || "fb"} ${last_name || "user"}`.trim(),
-        pic: profile_pic
+        name: `${res.data.first_name || "fb"} ${res.data.last_name || "user"}`.trim(),
+        pic: res.data.profile_pic
       };
     } catch (e) {
-      return { name: "user", pic: null };
+      return null;
     }
   };
 };
