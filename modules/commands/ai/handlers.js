@@ -9,20 +9,24 @@ async function askChipp(userPrompt, imageUrl, sessionData) {
     if (imageUrl) userMessage += `[Image URL: ${imageUrl}]\n\n`;
     userMessage += userPrompt || "Describe this image in detail.";
 
-    const response = await http.post("https://app.chipp.ai/api/v1/chat/completions", {
-        model: "newapplication-10035084",
-        messages: [
-            { role: "system", content: identityPrompt },
-            { role: "user", content: userMessage }
-        ],
-        chatSessionId: sessionData.chatSessionId,
-        stream: false
-    }, { 
-        headers: { "Authorization": `Bearer ${API_KEY}`, "Content-Type": "application/json" },
-        timeout: 60000
-    });
+    try {
+        const response = await http.post("https://app.chipp.ai/api/v1/chat/completions", {
+            model: "newapplication-10035084",
+            messages: [
+                { role: "system", content: identityPrompt },
+                { role: "user", content: userMessage }
+            ],
+            chatSessionId: sessionData?.chatSessionId,
+            stream: false
+        }, { 
+            headers: { "Authorization": `Bearer ${API_KEY}`, "Content-Type": "application/json" },
+            timeout: 60000
+        });
 
-    return response.data;
+        return response.data;
+    } catch (e) {
+        return { error: true };
+    }
 }
 
 module.exports = { askChipp };
