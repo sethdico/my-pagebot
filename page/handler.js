@@ -1,14 +1,5 @@
 const db = require("../modules/core/database");
 const cooldowns = new Map();
-const syncLocks = new Map();
-
-// cleanup old cooldowns every 10 min
-setInterval(() => {
-    const now = Date.now();
-    for (const [key, time] of cooldowns.entries()) {
-        if (now - time > 3600000) cooldowns.delete(key);
-    }
-}, 600000);
 
 module.exports = async function (event, api) {
     if (!event.sender?.id) return;
@@ -18,114 +9,65 @@ module.exports = async function (event, api) {
     const isAdmin = global.ADMINS.has(id);
     const now = Date.now();
 
-    let user = global.userCache.get(id);
-    
-    // user sync (once per 24h)
+    // sync user data (buffered)
     try {
-        if (Math.random() < 0.01) db.purgeInactiveUsers();
-
-        const needsSync = !user || !user.lastSynced || (now - new Date(user.lastSynced).getTime() > 86400000);
-        
-        if (needsSync && !syncLocks.has(id)) {
-            syncLocks.set(id, true);
-            try {
-                let dbUser = await db.getUserData(id);
-                
-                if (!dbUser || !dbUser.lastSynced || (now - new Date(dbUser.lastSynced).getTime() > 86400000)) {
-                    const fb = await api.getUserInfo(id);
-                    const fbData = {
-                        name: fb.name || `${fb.first_name} ${fb.last_name}`,
-                        firstName: fb.first_name,
-                        lastName: fb.last_name,
-                        profilePic: fb.profile_pic,
-                        gender: fb.gender,
-                        link: fb.link,
-                        locale: fb.locale,
-                        timezone: fb.timezone
-                    };
-                    user = await db.syncUser(id, fbData);
-                } else {
-                    user = await db.syncUser(id);
-                }
-                global.userCache.set(id, user);
-            } finally {
-                syncLocks.delete(id);
-            }
-        } else if (!needsSync) {
-            db.syncUser(id);
-        }
+        const userInfo = await api.getUserInfo(id).catch(() => ({ name: 'user' }));
+        db.syncUser(id, userInfo);
     } catch (e) {
-        if (!user) user = { firstName: "user", name: "user" };
+        db.syncUser(id);
     }
 
-    // maintenance mode
+    // maintenance check
     if (global.MAINTENANCE_MODE && !isAdmin) {
-        return reply(`maintenance mode\n\n${global.MAINTENANCE_REASON}`);
+        return reply(`maintenance mode: ${global.MAINTENANCE_REASON}`);
     }
 
-    // get started payload
+    // get started
     if (event.postback?.payload === "GET_STARTED_PAYLOAD") {
-        return reply(`hey ${user.firstName || 'there'}, type help to start`);
+        return reply("ask questions or type help to see commands.");
     }
 
-    // ignore echoes
     if (event.message?.is_echo) return;
     
     const body = (event.message?.text || event.postback?.payload || "").trim();
-    const hasAttachments = !!(event.message?.attachments);
+    if (!body) return;
 
-    // category shortcuts
-    const categories = ["AI", "FUN", "UTILITY", "ADMIN"];
-    const words = body.split(/\s+/);
+    const args = body.split(/\s+/);
+    const cmdName = args.shift().toLowerCase();
     
-    if (words.length === 1 && categories.includes(body.toUpperCase())) {
-        const cat = body.toUpperCase();
-        if (cat === "ADMIN" && !isAdmin) return;
-        
-        let cmds = [];
-        for (const [name, cmd] of global.client.commands) {
-            if (cmd.config.category?.toUpperCase() === cat) cmds.push(name);
-        }
-        return reply(`${cat.toLowerCase()} commands\n${cmds.sort().join(", ")}`);
-    }
-
-    // find command
-    const cmdName = words.shift().toLowerCase();
     const command = global.client.commands.get(cmdName) || 
                     global.client.commands.get(global.client.aliases.get(cmdName));
 
     if (command) {
-        if (command.config.adminOnly && !isAdmin) return reply("admin only");
+        if (command.config.adminOnly && !isAdmin) return;
 
-        // cooldown check
-        if (command.config.cooldown && command.config.cooldown > 0 && !isAdmin) {
+        // cooldown
+        if (command.config.cooldown && !isAdmin) {
             const key = `${id}-${command.config.name}`;
             const lastUsed = cooldowns.get(key) || 0;
             const timeLeft = (lastUsed + (command.config.cooldown * 1000)) - now;
 
-            if (timeLeft > 0) {
-                return reply(`wait ${Math.ceil(timeLeft / 1000)}s`);
-            }
+            if (timeLeft > 0) return reply(`wait ${Math.ceil(timeLeft / 1000)}s`);
             cooldowns.set(key, now);
         }
 
         try {
             db.trackCommandUsage(cmdName);
-            await command.run({ event, args: words, api, reply });
+            await command.run({ event, args, api, reply });
         } catch (e) { 
-            global.log.error(`error running ${cmdName}:`, e.message);
-            reply(`error: ${e.message}`); 
+            console.error(`error running ${cmdName}:`, e.message);
+            reply("error executing command."); 
         }
     } 
-    // fallback to ai
-    else if ((body.length > 3 || hasAttachments) && !event.message?.is_echo) {
+    // AI fallback
+    else if (body.length > 2) {
         const ai = global.client.commands.get("ai");
-        const ignore = ["lol", "haha", "wow", "ok", "okay", "?", "nice", "cool"];
-        
-        if (ai && !ignore.includes(body.toLowerCase())) {
+        if (ai) {
             try {
                 if (api.sendTypingIndicator) api.sendTypingIndicator(true, id).catch(()=>{});
                 await ai.run({ event, args: body.split(/\s+/), api, reply });
+            } catch (e) {
+                // silent fail for ai
             } finally { 
                 if (api.sendTypingIndicator) api.sendTypingIndicator(false, id).catch(()=>{}); 
             }
